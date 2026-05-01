@@ -32,19 +32,19 @@
 
     <ItemGroup>
         <Reference Include="Assembly-CSharp">
-            <HintPath>..\DLL\Assembly-CSharp.dll</HintPath>
+            <HintPath>$(GameDir)\NuclearOption_Data\Managed\Assembly-CSharp.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="UnityEngine.CoreModule">
-            <HintPath>..\DLL\UnityEngine.CoreModule.dll</HintPath>
+            <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.CoreModule.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="UnityEngine">
-            <HintPath>..\DLL\UnityEngine.dll</HintPath>
+            <HintPath>$(GameDir)\NuclearOption_Data\Managed\UnityEngine.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="Mirage">
-            <HintPath>..\DLL\Mirage.dll</HintPath>
+            <HintPath>$(GameDir)\NuclearOption_Data\Managed\Mirage.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="UnityEngine.UI">
