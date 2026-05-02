@@ -6,9 +6,9 @@ namespace MouseAimMod;
 [HarmonyPatch(typeof(PilotPlayerState), "PlayerAxisControls")]
 public static class PilotPlayerStatePatch
 {
-    internal static PID PitchPID = new PID(0.025f, 0.01f, 0.005f);
-    internal static PID RollPID = new PID(0.03f, 0.005f, 0.002f);
-    internal static PID YawPID = new PID(0.1f, 0.1f, 0.05f);
+    internal static PID PitchPID;
+    internal static PID RollPID;
+    internal static PID YawPID;
     private static bool pidsInitialized;
 
     [HarmonyPatch("PlayerControls")]
@@ -36,7 +36,7 @@ public static class PilotPlayerStatePatch
         float pitch = Mathf.Asin(-aircraft.transform.forward.y) * Mathf.Rad2Deg;
         float roll  = Mathf.Asin( aircraft.transform.right.y)  * Mathf.Rad2Deg;
 
-        if (Mathf.Abs(pitch) > 15f || Mathf.Abs(roll) > 15f)
+        if (Mathf.Abs(pitch) > Plugin.HoverExitAngle.Value || Mathf.Abs(roll) > Plugin.HoverExitAngle.Value)
         {
             if (HoverThrottleController.HoverActive)
             {
@@ -78,6 +78,8 @@ public static class PilotPlayerStatePatch
             return;
 
         var aircraft = pilot.aircraft;
+        if (aircraft.rb == null)
+            return;
 
         var controlInputs = ___controlInputs;
         if (controlInputs == null)
@@ -90,11 +92,15 @@ public static class PilotPlayerStatePatch
             HoverThrottleController.ApplyHoverThrottle(controlInputs, aircraft);
         }
 
-        if (freeLook)
+        bool aimActive = Plugin.InvertFreeLook.Value ? freeLook : !freeLook;
+        if (!aimActive)
         {
             pidsInitialized = false;
             return;
         }
+
+        if (Camera.main == null)
+            return;
 
         Vector3 viewDirection = Camera.main.transform.forward;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;

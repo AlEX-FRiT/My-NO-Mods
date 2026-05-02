@@ -45,7 +45,8 @@ public static class CameraCockpitStatePatch
         Quaternion planeRotation = aircraft.transform.rotation;
 
         var trv = Traverse.Create(__instance);
-        trv.Field("targetRB").SetValue(aircraft.cockpit.rb);
+        if (aircraft.cockpit != null)
+            trv.Field("targetRB").SetValue(aircraft.cockpit.rb);
 
         if (!GameManager.flightControlsEnabled)
         {
@@ -188,6 +189,8 @@ public static class CameraCockpitStatePatch
     [HarmonyPostfix]
     public static void EnterStatePostfix(Aircraft ___aircraft)
     {
+        HoverThrottleController.ResetState();
+
         if (___aircraft != null)
         {
             CameraAimState.Reset(___aircraft.transform.rotation);

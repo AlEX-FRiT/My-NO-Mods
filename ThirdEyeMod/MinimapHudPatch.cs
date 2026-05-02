@@ -9,7 +9,8 @@ internal class MinimapMaxHudPatch
     [HarmonyPostfix]
     private static void Postfix()
     {
-        if (SceneSingleton<CombatHUD>.i.aircraft != null
+        if (SceneSingleton<CombatHUD>.i != null
+            && SceneSingleton<CombatHUD>.i.aircraft != null
             && (CameraStateManager.cameraMode == CameraMode.cockpit
                 || CameraStateManager.cameraMode == CameraMode.orbit))
         {
@@ -25,7 +26,8 @@ internal class MinimapMinHudPatch
     [HarmonyPostfix]
     private static void Postfix()
     {
-        if (SceneSingleton<CombatHUD>.i.aircraft != null
+        if (SceneSingleton<CombatHUD>.i != null
+            && SceneSingleton<CombatHUD>.i.aircraft != null
             && (CameraStateManager.cameraMode == CameraMode.cockpit
                 || CameraStateManager.cameraMode == CameraMode.orbit))
         {

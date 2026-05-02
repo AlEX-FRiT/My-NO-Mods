@@ -9,7 +9,8 @@ internal class OrbitHudPatch
     [HarmonyPostfix]
     private static void Postfix(CameraOrbitState __instance, CameraStateManager cam)
     {
-        if (SceneSingleton<CombatHUD>.i.aircraft != null
+        if (SceneSingleton<CombatHUD>.i != null
+            && SceneSingleton<CombatHUD>.i.aircraft != null
             && (CameraStateManager.cameraMode == CameraMode.cockpit
                 || CameraStateManager.cameraMode == CameraMode.orbit))
         {
@@ -18,7 +19,8 @@ internal class OrbitHudPatch
         }
 
         if (CameraStateManager.cameraMode == CameraMode.orbit
-            && cam.followingUnit != null)
+            && cam.followingUnit != null
+            && cam.followingUnit.rb != null)
         {
             var rot = cam.followingUnit.rb.transform.eulerAngles;
             float yaw = rot.y;

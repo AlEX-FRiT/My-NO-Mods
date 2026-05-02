@@ -5,6 +5,7 @@ using HarmonyLib;
 namespace HorizonLineMod;
 
 [BepInPlugin("nuclearoption.horizonlinemod", "HorizonLineMod", "1.0.0")]
+[BepInProcess("NuclearOption.exe")]
 public class Plugin : BaseUnityPlugin
 {
     internal static ConfigEntry<bool> Enabled;

@@ -8,22 +8,21 @@ public static class CameraOrbitStatePatch
 {
     [HarmonyPatch("CameraMotion")]
     [HarmonyPrefix]
-    public static bool CameraMotionPrefix(CameraOrbitState __instance, CameraStateManager cam)
+    public static bool CameraMotionPrefix(
+        CameraOrbitState __instance,
+        CameraStateManager cam,
+        ref float ___panView,
+        ref float ___tiltView)
     {
         if (!Plugin.Enabled.Value)
             return true;
 
-        var trv = Traverse.Create(__instance);
-        float panView  = trv.Field("panView").GetValue<float>();
-        float tiltView = trv.Field("tiltView").GetValue<float>();
-        if (panView >  180f) panView -= 360f;
-        if (panView < -180f) panView += 360f;
-        if (tiltView >  89f) tiltView =  89f;
-        if (tiltView < -89f) tiltView = -89f;
-        trv.Field("panView").SetValue(panView);
-        trv.Field("tiltView").SetValue(tiltView);
+        if (___panView >  180f) ___panView -= 360f;
+        if (___panView < -180f) ___panView += 360f;
+        if (___tiltView >  89f) ___tiltView =  89f;
+        if (___tiltView < -89f) ___tiltView = -89f;
 
-        cam.transform.rotation = Quaternion.Euler(tiltView, panView, 0f);
+        cam.transform.rotation = Quaternion.Euler(___tiltView, ___panView, 0f);
         cam.transform.position = cam.cameraPivot.position
             + CameraMove(cam.transform.eulerAngles.y, cam.transform.eulerAngles.x);
 

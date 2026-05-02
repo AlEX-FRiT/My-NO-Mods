@@ -22,7 +22,7 @@ public static class CombatHUD_ShowTargetInfo_Patch
         var markerLookup = Traverse.Create(__instance).Field("markerLookup").GetValue<Dictionary<Unit, HUDUnitMarker>>();
         if (markerLookup == null || !markerLookup.TryGetValue(targetList[0], out var marker)) return;
 
-        if (!marker.selected || marker.unit == null || !marker.image.enabled) return;
+        if (!marker.selected || marker.unit == null || marker.image == null || !marker.image.enabled) return;
 
         var unit = marker.unit;
         if (unit.HasRadarEmission() && unit.radar is Radar radar && radar.IsJammed()) return;

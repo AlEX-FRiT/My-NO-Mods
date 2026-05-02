@@ -9,7 +9,8 @@ internal class ResumeHudPatch
     [HarmonyPostfix]
     private static void Postfix()
     {
-        if (SceneSingleton<CombatHUD>.i.aircraft != null
+        if (SceneSingleton<CombatHUD>.i != null
+            && SceneSingleton<CombatHUD>.i.aircraft != null
             && CameraStateManager.cameraMode == CameraMode.orbit)
         {
             FlightHud.EnableCanvas(true);

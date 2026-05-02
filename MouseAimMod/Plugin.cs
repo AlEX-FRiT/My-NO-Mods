@@ -6,6 +6,7 @@ using HarmonyLib;
 namespace MouseAimMod;
 
 [BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "1.0.0")]
+[BepInProcess("NuclearOption.exe")]
 public class Plugin : BaseUnityPlugin
 {
     internal static new ManualLogSource Logger;
@@ -20,6 +21,8 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> YawI;
     internal static ConfigEntry<float> YawD;
     internal static ConfigEntry<bool> MouseAimEnabled;
+    internal static ConfigEntry<bool> InvertFreeLook;
+    internal static ConfigEntry<float> HoverExitAngle;
 
     private Harmony _harmony;
 
@@ -41,10 +44,14 @@ public class Plugin : BaseUnityPlugin
         YawD = Config.Bind("PID - Yaw", "D", 0.05f, "Yaw PID derivative gain");
 
         MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
+        InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
+        HoverExitAngle = Config.Bind("Hover", "ExitAngle", 20f,
+            new ConfigDescription("Pitch or roll angle exceeding this disables hover throttle",
+                new AcceptableValueRange<float>(5f, 60f)));
 
-        _ = PilotPlayerStatePatch.PitchPID;
-
-        ApplyPidConfig();
+        PilotPlayerStatePatch.PitchPID = new PID(PitchP.Value, PitchI.Value, PitchD.Value);
+        PilotPlayerStatePatch.RollPID  = new PID(RollP.Value, RollI.Value, RollD.Value);
+        PilotPlayerStatePatch.YawPID   = new PID(YawP.Value, YawI.Value, YawD.Value);
 
         PitchP.SettingChanged += (_, _) => ApplyPidConfig();
         PitchI.SettingChanged += (_, _) => ApplyPidConfig();

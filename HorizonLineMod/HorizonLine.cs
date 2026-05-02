@@ -24,8 +24,11 @@ public class HorizonLine : MonoBehaviour
     
     private GameObject altitudeTextObj;
     private Text altitudeText;
+    private Image altitudeBg;
     
     private Aircraft targetAircraft;
+
+    private float verticalSpeedSmoothed;
     
     private const float LongLineThickness = 2f;
     private const float ShortLineLength = 12.5f;
@@ -56,13 +59,9 @@ public class HorizonLine : MonoBehaviour
         int longTexW = (int)longLineLength;
         int longTexH = (int)LongLineThickness;
         longLineTexture = new Texture2D(longTexW, longTexH, TextureFormat.RGBA32, false);
-        for (int x = 0; x < longTexW; x++)
-        {
-            for (int y = 0; y < longTexH; y++)
-            {
-                longLineTexture.SetPixel(x, y, Color.white);
-            }
-        }
+        Color[] longPixels = new Color[longTexW * longTexH];
+for (int i = 0; i < longPixels.Length; i++) longPixels[i] = Color.white;
+        longLineTexture.SetPixels(longPixels);
         longLineTexture.Apply();
         
         longLineSprite = Sprite.Create(longLineTexture, new Rect(0, 0, longTexW, longTexH), new Vector2(0.5f, 0.5f));
@@ -87,13 +86,9 @@ public class HorizonLine : MonoBehaviour
         int noseTexW = (int)NoseLineLength;
         int noseTexH = (int)NoseLineThickness;
         noseLineTexture = new Texture2D(noseTexW, noseTexH, TextureFormat.RGBA32, false);
-        for (int x = 0; x < noseTexW; x++)
-        {
-            for (int y = 0; y < noseTexH; y++)
-            {
-                noseLineTexture.SetPixel(x, y, Color.white);
-            }
-        }
+        Color[] nosePixels = new Color[noseTexW * noseTexH];
+for (int i = 0; i < nosePixels.Length; i++) nosePixels[i] = Color.white;
+        noseLineTexture.SetPixels(nosePixels);
         noseLineTexture.Apply();
         
         noseLineSprite = Sprite.Create(noseLineTexture, new Rect(0, 0, noseTexW, noseTexH), new Vector2(0f, 0.5f));
@@ -120,7 +115,7 @@ public class HorizonLine : MonoBehaviour
         rt.anchorMin = new Vector2(0.5f, 0.5f);
         rt.anchorMax = new Vector2(0.5f, 0.5f);
         rt.pivot = new Vector2(0.5f, 0.5f);
-        rt.sizeDelta = new Vector2(100f, 20f);
+        rt.sizeDelta = new Vector2(64f, 16f);
         
         altitudeText = altitudeTextObj.AddComponent<Text>();
         altitudeText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
@@ -128,6 +123,18 @@ public class HorizonLine : MonoBehaviour
         altitudeText.alignment = TextAnchor.MiddleCenter;
         altitudeText.color = new Color(0f, 1f, 0f, 0.7f);
         altitudeText.text = "";
+
+        GameObject bgObj = new GameObject("AltBg");
+        bgObj.transform.SetParent(altitudeTextObj.transform, false);
+        bgObj.transform.SetAsFirstSibling();
+        altitudeBg = bgObj.AddComponent<Image>();
+        altitudeBg.color = new Color(1f, 1f, 0f, 0.05f);
+        altitudeBg.enabled = false;
+        RectTransform bgRt = bgObj.GetComponent<RectTransform>();
+        bgRt.anchorMin = Vector2.zero;
+        bgRt.anchorMax = Vector2.one;
+        bgRt.offsetMin = new Vector2(-2, -1);
+        bgRt.offsetMax = new Vector2(2, 1);
     }
     
     private void CreateShortLine()
@@ -139,13 +146,9 @@ public class HorizonLine : MonoBehaviour
         int shortTexW = (int)ShortLineLength;
         int shortTexH = (int)ShortLineThickness;
         shortLineTexture = new Texture2D(shortTexW, shortTexH, TextureFormat.RGBA32, false);
-        for (int x = 0; x < shortTexW; x++)
-        {
-            for (int y = 0; y < shortTexH; y++)
-            {
-                shortLineTexture.SetPixel(x, y, Color.white);
-            }
-        }
+        Color[] shortPixels = new Color[shortTexW * shortTexH];
+for (int i = 0; i < shortPixels.Length; i++) shortPixels[i] = Color.white;
+        shortLineTexture.SetPixels(shortPixels);
         shortLineTexture.Apply();
         
         shortLineSprite = Sprite.Create(shortLineTexture, new Rect(0, 0, shortTexW, shortTexH), new Vector2(0.5f, 0.5f));
@@ -195,7 +198,7 @@ public class HorizonLine : MonoBehaviour
     
     private void LateUpdate()
     {
-        if (targetAircraft == null || targetAircraft.disabled)
+        if (targetAircraft == null || targetAircraft.disabled || targetAircraft.rb == null)
         {
             SetVisible(false);
             return;
@@ -271,7 +274,9 @@ public class HorizonLine : MonoBehaviour
         if (targetAircraft == null || altitudeText == null) return;
         
         float radarAlt = targetAircraft.radarAlt;
-        float verticalSpeed = Vector3.Dot(targetAircraft.rb.velocity, Vector3.up);
+        float rawVs = Vector3.Dot(targetAircraft.rb.velocity, Vector3.up);
+        verticalSpeedSmoothed += (rawVs - verticalSpeedSmoothed) * Mathf.Clamp01(5f * Time.deltaTime);
+        float verticalSpeed = verticalSpeedSmoothed;
         
         if (radarAlt < 100f)
         {
@@ -281,6 +286,8 @@ public class HorizonLine : MonoBehaviour
         {
             altitudeText.text = $"{(verticalSpeed >= 0f ? "+" : "-")} {Mathf.Abs(verticalSpeed):F1} M/S";
         }
+        altitudeText.color = verticalSpeed >= 0f ? new Color(0f, 1f, 0f, 0.7f) : new Color(1f, 0f, 0f, 0.9f);
+        altitudeBg.enabled = verticalSpeed < 0f;
         
         if (shortLineContainer != null)
         {

@@ -6,6 +6,7 @@ using HarmonyLib;
 namespace SureFireMod;
 
 [BepInPlugin("nuclearoption.surefiremod", "SureFire Mod", "1.0.0")]
+[BepInProcess("NuclearOption.exe")]
 public class Plugin : BaseUnityPlugin
 {
     internal static new ManualLogSource Logger;

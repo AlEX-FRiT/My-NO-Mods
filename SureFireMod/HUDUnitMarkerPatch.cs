@@ -12,7 +12,7 @@ public static class HUDUnitMarker_UpdatePosition_Patch
         if (!Plugin.Enabled.Value) return;
         if (!__instance.selected) return;
         if (__instance.unit == null) return;
-        if (!__instance.image.enabled) return;
+        if (!__instance.image || !__instance.image.enabled) return;
 
         var unit = __instance.unit;
 

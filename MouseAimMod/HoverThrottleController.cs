@@ -7,6 +7,12 @@ public static class HoverThrottleController
 {
     public static bool HoverActive { get; private set; }
 
+    public static void ResetState()
+    {
+        HoverActive = false;
+        needsInit = true;
+    }
+
     private static float throttleOverride;
     private static float hoverBaseThrottle = 0.5f;
     private static float climbSensitivity = 8f;
@@ -25,7 +31,7 @@ public static class HoverThrottleController
 
     public static void Disable(PilotPlayerState pilotPlayerState)
     {
-        HoverActive = false;
+        ResetState();
         float raw = PlayerSettings.throttleUseNegative ? (throttleOverride * 2f - 1f) : throttleOverride;
         Traverse.Create(pilotPlayerState).Field("simulatedThrottle").SetValue(raw);
         SceneSingleton<AircraftActionsReport>.i.ReportText("Hover Throttle <b>Disabled</b>", 3f);
@@ -55,7 +61,7 @@ public static class HoverThrottleController
         if (Mathf.Abs(controlInputs.throttle - hoverBaseThrottle) < 0.1f)
             targetVS = 0f;
 
-        float vs = Vector3.Dot(aircraft.rb.velocity, Vector3.up);
+        float vs = Vector3.Dot(aircraft.rb?.velocity ?? Vector3.zero, Vector3.up);
         float error = vs - targetVS;
         float output = altitudePID.GetOutput(-error, 2f, Time.fixedDeltaTime,
             new Vector3(altitudePIDFactors.P, altitudePIDFactors.I, altitudePIDFactors.D));
