@@ -7,7 +7,7 @@ namespace ThirdEyeMod;
 internal class ResumeHudPatch
 {
     [HarmonyPostfix]
-    private static void Postfix(CameraStateManager ___cameraStateManager)
+    private static void Postfix()
     {
         if (SceneSingleton<CombatHUD>.i.aircraft != null
             && CameraStateManager.cameraMode == CameraMode.orbit)
