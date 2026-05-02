@@ -48,3 +48,4 @@ Deploy output DLL to `BepInEx/plugins/ModName/ModName.dll`.
 ## Known Issues
 
 - **Third-person turret crosshair frozen**: `Turret.FixedUpdate()` only updates `manualVector` when `currentState == cockpitState`. In Orbit mode the turret cursor doesn't track mouse input. Fix: patch the condition in `FixedUpdate` to also accept `orbitState`.
+- **ThirdEyeMod: mouse wheel Zoom View not implemented**: In cockpit mode, scroll wheel controls FOV. In the original third-person Orbit mode, scroll wheel controls camera distance (`viewDistAdjust`). ThirdEyeMod replaces `CameraMotion` but does not read `viewDistAdjust` — camera distance is fixed at the `CameraDistance` config value (default 30). To fix: read `viewDistAdjust` from the instance and apply it to the distance calculation.
