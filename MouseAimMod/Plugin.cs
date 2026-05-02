@@ -83,5 +83,9 @@ public class Plugin : BaseUnityPlugin
         PilotPlayerStatePatch.YawPID.dFactor = YawD.Value;
 
         CameraAimState.MouseAimEnabled = MouseAimEnabled.Value;
+
+        PilotPlayerStatePatch.PitchPID.Reseti();
+        PilotPlayerStatePatch.RollPID.Reseti();
+        PilotPlayerStatePatch.YawPID.Reseti();
     }
 }
