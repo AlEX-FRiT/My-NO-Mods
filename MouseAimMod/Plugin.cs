@@ -28,7 +28,7 @@ public class Plugin : BaseUnityPlugin
         Logger = base.Logger;
         Logger.LogInfo("Mouse Aim Mod is loaded!");
 
-        PitchP = Config.Bind("PID - Pitch", "P", 0.025f, "Pitch PID proportional gain");
+        PitchP = Config.Bind("PID - Pitch", "P", 0.03f, "Pitch PID proportional gain");
         PitchI = Config.Bind("PID - Pitch", "I", 0.01f,  "Pitch PID integral gain");
         PitchD = Config.Bind("PID - Pitch", "D", 0.005f, "Pitch PID derivative gain");
 
