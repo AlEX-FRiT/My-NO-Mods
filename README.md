@@ -8,7 +8,6 @@ BepInEx mods for Nuclear Option. Tested with BepInEx 5.x.
 
 1. Install [BepInEx 5.x](https://github.com/BepInEx/BepInEx/releases) into the game directory
 2. Install [ConfigurationManager](https://github.com/BepInEx/BepInEx.ConfigurationManager) plugin
-3. Install [RewiredBlocker](https://github.com/benediktwerner/RewiredBlocker) — prevents F1 menu clicks from passing through to the game (Nuclear Option uses Rewired input)
 
 ## Critical: BepInEx Config
 
