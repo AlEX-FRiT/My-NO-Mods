@@ -118,8 +118,13 @@ public static class PilotPlayerStatePatch
 
         float rollAngle = aircraft.transform.eulerAngles.z;
         if (rollAngle > 180f) rollAngle -= 360f;
-        float centeringFactor = 1f - Mathf.Clamp01(Mathf.Abs(horizontalDeviation) / 7.5f);
-        float rollError = horizontalDeviation + rollAngle * centeringFactor;
+
+        float rollError = horizontalDeviation;
+        if (Plugin.RollCentering.Value)
+        {
+            float centeringFactor = 1f - Mathf.Clamp01(Mathf.Abs(horizontalDeviation) / 7.5f);
+            rollError = horizontalDeviation + rollAngle * centeringFactor;
+        }
 
         if (!pidsInitialized)
         {
