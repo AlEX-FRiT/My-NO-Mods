@@ -122,8 +122,8 @@ public static class PilotPlayerStatePatch
         float rollError = horizontalDeviation;
         if (Plugin.RollCentering.Value)
         {
-            float centeringFactor = 1f - Mathf.Clamp01(Mathf.Abs(horizontalDeviation) / 7.5f);
-            rollError = horizontalDeviation + rollAngle * centeringFactor;
+            float centeringFactor = 1f - Mathf.Clamp01(Mathf.Abs(horizontalDeviation) / Plugin.CenteringRange.Value);
+            rollError = horizontalDeviation + rollAngle * centeringFactor * Plugin.CenteringGain.Value;
         }
 
         if (!pidsInitialized)

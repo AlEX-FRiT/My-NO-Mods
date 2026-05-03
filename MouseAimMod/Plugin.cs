@@ -25,6 +25,8 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> HoverExitAngle;
 
     internal static ConfigEntry<bool> RollCentering;
+    internal static ConfigEntry<float> CenteringRange;
+    internal static ConfigEntry<float> CenteringGain;
     private Harmony _harmony;
 
     private void Awake()
@@ -50,6 +52,12 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Pitch or roll angle exceeding this disables hover throttle",
                 new AcceptableValueRange<float>(5f, 60f)));
         RollCentering = Config.Bind("General", "RollCentering", false, "Auto roll back to level when camera is near center");
+        CenteringRange = Config.Bind("General", "CenteringRange", 15f,
+            new ConfigDescription("Horizontal deviation range for roll centering (degrees)",
+                new AcceptableValueRange<float>(0.5f, 20f)));
+        CenteringGain = Config.Bind("General", "CenteringGain", 0.3f,
+            new ConfigDescription("Roll centering strength gain",
+                new AcceptableValueRange<float>(0f, 1f)));
 
         PilotPlayerStatePatch.PitchPID = new PID(PitchP.Value, PitchI.Value, PitchD.Value);
         PilotPlayerStatePatch.RollPID  = new PID(RollP.Value, RollI.Value, RollD.Value);
