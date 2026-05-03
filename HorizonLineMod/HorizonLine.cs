@@ -17,10 +17,13 @@ public class HorizonLine : MonoBehaviour
     private Texture2D shortLineTexture;
     private Sprite shortLineSprite;
     
-    private GameObject noseLine;
-    private Image noseLineImage;
-    private Texture2D noseLineTexture;
-    private Sprite noseLineSprite;
+    private GameObject noseDot1;
+    private Image noseDot1Image;
+    private GameObject noseDot2;
+    private Image noseDot2Image;
+    
+    private GameObject flightLine;
+    private Image flightLineImage;
     
     private GameObject altitudeTextObj;
     private Text altitudeText;
@@ -29,6 +32,8 @@ public class HorizonLine : MonoBehaviour
     private Aircraft targetAircraft;
 
     private float verticalSpeedSmoothed;
+    private float flightLateralSmoothed;
+    private float flightVerticalSmoothed;
     
     private const float LongLineThickness = 2f;
     private const float ShortLineLength = 12.5f;
@@ -44,7 +49,8 @@ public class HorizonLine : MonoBehaviour
         targetAircraft = aircraft;
         CreateLongLine();
         CreateShortLine();
-        CreateNoseLine();
+        CreateNoseDots();
+        CreateFlightVector();
         CreateAltitudeText();
     }
     
@@ -77,32 +83,39 @@ for (int i = 0; i < longPixels.Length; i++) longPixels[i] = Color.white;
         longLineImage.color = new Color(0f, 1f, 0f, 0.3f);
     }
     
-    private void CreateNoseLine()
+    private void CreateNoseDots()
     {
-        noseLine = new GameObject("NoseLine");
-        noseLine.transform.SetParent(transform, false);
-        noseLine.transform.localPosition = Vector3.zero;
-        
-        int noseTexW = (int)NoseLineLength;
-        int noseTexH = (int)NoseLineThickness;
-        noseLineTexture = new Texture2D(noseTexW, noseTexH, TextureFormat.RGBA32, false);
-        Color[] nosePixels = new Color[noseTexW * noseTexH];
-for (int i = 0; i < nosePixels.Length; i++) nosePixels[i] = Color.white;
-        noseLineTexture.SetPixels(nosePixels);
-        noseLineTexture.Apply();
-        
-        noseLineSprite = Sprite.Create(noseLineTexture, new Rect(0, 0, noseTexW, noseTexH), new Vector2(0f, 0.5f));
-        
-        RectTransform rt = noseLine.AddComponent<RectTransform>();
-        rt.anchorMin = new Vector2(0.5f, 0.5f);
-        rt.anchorMax = new Vector2(0.5f, 0.5f);
-        rt.pivot = new Vector2(0f, 0.5f);
-        rt.sizeDelta = new Vector2(NoseLineLength, NoseLineThickness);
-        
-        noseLineImage = noseLine.AddComponent<Image>();
-        noseLineImage.sprite = noseLineSprite;
-        noseLineImage.color = new Color(0f, 1f, 0f, 0.7f);
-        noseLineImage.enabled = false;
+        float dotSize = 3f;
+        Texture2D dotTex = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+        dotTex.SetPixel(0, 0, Color.white);
+        dotTex.Apply();
+        Sprite dotSprite = Sprite.Create(dotTex, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f));
+
+        noseDot1 = new GameObject("NoseDot1");
+        noseDot1.transform.SetParent(transform, false);
+        noseDot1.transform.localPosition = Vector3.zero;
+        RectTransform rt1 = noseDot1.AddComponent<RectTransform>();
+        rt1.anchorMin = new Vector2(0.5f, 0.5f);
+        rt1.anchorMax = new Vector2(0.5f, 0.5f);
+        rt1.pivot = new Vector2(0.5f, 0.5f);
+        rt1.sizeDelta = new Vector2(dotSize, dotSize);
+        noseDot1Image = noseDot1.AddComponent<Image>();
+        noseDot1Image.sprite = dotSprite;
+        noseDot1Image.color = new Color(0f, 1f, 0f, 0.7f);
+        noseDot1Image.enabled = false;
+
+        noseDot2 = new GameObject("NoseDot2");
+        noseDot2.transform.SetParent(transform, false);
+        noseDot2.transform.localPosition = Vector3.zero;
+        RectTransform rt2 = noseDot2.AddComponent<RectTransform>();
+        rt2.anchorMin = new Vector2(0.5f, 0.5f);
+        rt2.anchorMax = new Vector2(0.5f, 0.5f);
+        rt2.pivot = new Vector2(0.5f, 0.5f);
+        rt2.sizeDelta = new Vector2(dotSize, dotSize);
+        noseDot2Image = noseDot2.AddComponent<Image>();
+        noseDot2Image.sprite = dotSprite;
+        noseDot2Image.color = new Color(0f, 1f, 0f, 0.7f);
+        noseDot2Image.enabled = false;
     }
     
     private void CreateAltitudeText()
@@ -206,7 +219,8 @@ for (int i = 0; i < shortPixels.Length; i++) shortPixels[i] = Color.white;
         
         SetVisible(true);
         UpdateLines();
-        UpdateNoseLine();
+        UpdateNoseDots();
+        UpdateFlightVector();
         UpdateAltitudeText();
     }
     
@@ -240,9 +254,9 @@ for (int i = 0; i < shortPixels.Length; i++) shortPixels[i] = Color.white;
         }
     }
     
-    private void UpdateNoseLine()
+    private void UpdateNoseDots()
     {
-        if (targetAircraft == null || noseLine == null) return;
+        if (targetAircraft == null || noseDot1 == null) return;
         
         Camera camera = SceneSingleton<CameraStateManager>.i?.mainCamera;
         if (camera == null) return;
@@ -254,21 +268,77 @@ for (int i = 0; i < shortPixels.Length; i++) shortPixels[i] = Color.white;
         
         if (angle <= NoseLineThreshold)
         {
-            noseLineImage.enabled = false;
+            noseDot1Image.enabled = false;
+            noseDot2Image.enabled = false;
             return;
         }
         
-        // Project aircraft forward into camera local space to get screen direction
         Vector3 localDir = camera.transform.InverseTransformDirection(aircraftForward);
         float screenAngle = Mathf.Atan2(localDir.y, localDir.x) * Mathf.Rad2Deg;
         
-        float offsetDist = 2f * ShortLineLength;
-        float rad = screenAngle * Mathf.Deg2Rad;
-        noseLine.transform.localEulerAngles = new Vector3(0, 0, screenAngle);
-        noseLine.transform.localPosition = new Vector3(Mathf.Cos(rad) * offsetDist, Mathf.Sin(rad) * offsetDist, 0);
-        noseLineImage.enabled = true;
+        float dotAngleSpacing = 15f;
+        float radius = 2f * ShortLineLength;
+        
+        float rad1 = (screenAngle - dotAngleSpacing) * Mathf.Deg2Rad;
+        float rad2 = (screenAngle + dotAngleSpacing) * Mathf.Deg2Rad;
+        
+        noseDot1.transform.localPosition = new Vector3(Mathf.Cos(rad1) * radius, Mathf.Sin(rad1) * radius, 0);
+        noseDot2.transform.localPosition = new Vector3(Mathf.Cos(rad2) * radius, Mathf.Sin(rad2) * radius, 0);
+        noseDot1Image.enabled = true;
+        noseDot2Image.enabled = true;
     }
     
+    private void CreateFlightVector()
+    {
+        int lineW = 13;
+        int lineH = 2;
+        Texture2D tex = new Texture2D(lineW, lineH, TextureFormat.RGBA32, false);
+        Color[] pixels = new Color[lineW * lineH];
+        for (int i = 0; i < pixels.Length; i++) pixels[i] = Color.white;
+        tex.SetPixels(pixels);
+        tex.Apply();
+        Sprite spr = Sprite.Create(tex, new Rect(0, 0, lineW, lineH), new Vector2(0f, 0.5f));
+
+        flightLine = new GameObject("FlightVector");
+        flightLine.transform.SetParent(transform, false);
+        RectTransform rt = flightLine.AddComponent<RectTransform>();
+        rt.anchorMin = new Vector2(0.5f, 0.5f);
+        rt.anchorMax = new Vector2(0.5f, 0.5f);
+        rt.pivot = new Vector2(0f, 0.5f);
+        rt.sizeDelta = new Vector2(lineW, lineH);
+        flightLineImage = flightLine.AddComponent<Image>();
+        flightLineImage.sprite = spr;
+        flightLineImage.color = new Color(0f, 1f, 0f, 0.5f);
+        flightLineImage.enabled = false;
+    }
+
+    private void UpdateFlightVector()
+    {
+        if (targetAircraft == null || flightLine == null) return;
+        var velocity = targetAircraft.rb.velocity;
+        float verticalSpeed = velocity.y;
+        float lateralSpeed = Vector3.Dot(velocity, targetAircraft.transform.right);
+        float smoothing = Mathf.Clamp01(5f * Time.deltaTime);
+        flightLateralSmoothed  += (lateralSpeed  - flightLateralSmoothed)  * smoothing;
+        flightVerticalSmoothed += (verticalSpeed - flightVerticalSmoothed) * smoothing;
+        float magnitude = Mathf.Sqrt(flightLateralSmoothed * flightLateralSmoothed + flightVerticalSmoothed * flightVerticalSmoothed);
+        if (magnitude < 0.1f)
+        {
+            flightLineImage.enabled = false;
+            return;
+        }
+
+        float flightAngle = Mathf.Atan2(flightVerticalSmoothed, flightLateralSmoothed) * Mathf.Rad2Deg;
+        float length = Mathf.Clamp(3f + magnitude * 0.5f, 3f, 13f);
+        float radius = 2f * ShortLineLength;
+
+        flightLine.transform.localEulerAngles = new Vector3(0, 0, flightAngle);
+        float rad = flightAngle * Mathf.Deg2Rad;
+        flightLine.transform.localPosition = new Vector3(Mathf.Cos(rad) * radius, Mathf.Sin(rad) * radius, 0);
+        flightLineImage.enabled = true;
+        flightLine.GetComponent<RectTransform>().sizeDelta = new Vector2(length, 2f);
+    }
+
     private void UpdateAltitudeText()
     {
         if (targetAircraft == null || altitudeText == null) return;
@@ -308,7 +378,9 @@ for (int i = 0; i < shortPixels.Length; i++) shortPixels[i] = Color.white;
         if (shortLineLeftImage != null) shortLineLeftImage.enabled = visible;
         if (shortLineRightImage != null) shortLineRightImage.enabled = visible;
         if (shortLineUpImage != null) shortLineUpImage.enabled = visible;
-        if (noseLineImage != null && !visible) noseLineImage.enabled = false;
+        if (noseDot1Image != null && !visible) noseDot1Image.enabled = false;
+        if (noseDot2Image != null && !visible) noseDot2Image.enabled = false;
+        if (flightLineImage != null && !visible) flightLineImage.enabled = false;
         if (altitudeText != null) altitudeText.enabled = visible;
     }
     
@@ -322,9 +394,9 @@ for (int i = 0; i < shortPixels.Length; i++) shortPixels[i] = Color.white;
         if (shortLineSprite != null) Destroy(shortLineSprite);
         if (shortLineContainer != null) Destroy(shortLineContainer);
         
-        if (noseLineTexture != null) Destroy(noseLineTexture);
-        if (noseLineSprite != null) Destroy(noseLineSprite);
-        if (noseLine != null) Destroy(noseLine);
+        if (noseDot1 != null) Destroy(noseDot1);
+        if (noseDot2 != null) Destroy(noseDot2);
+        if (flightLine != null) Destroy(flightLine);
         
         if (altitudeTextObj != null) Destroy(altitudeTextObj);
     }
