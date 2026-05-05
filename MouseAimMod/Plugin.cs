@@ -27,6 +27,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<bool> RollCentering;
     internal static ConfigEntry<float> CenteringRange;
     internal static ConfigEntry<float> CenteringGain;
+    internal static ConfigEntry<float> OutputScale;
     private Harmony _harmony;
 
     private void Awake()
@@ -57,6 +58,9 @@ public class Plugin : BaseUnityPlugin
                 new AcceptableValueRange<float>(0.5f, 20f)));
         CenteringGain = Config.Bind("General", "CenteringGain", 0.3f,
             new ConfigDescription("Roll centering strength gain",
+                new AcceptableValueRange<float>(0f, 1f)));
+        OutputScale = Config.Bind("General", "OutputScale", 0.5f,
+            new ConfigDescription("PID output scale (non-keyboard only). 1=full, 0=none",
                 new AcceptableValueRange<float>(0f, 1f)));
 
         PilotPlayerStatePatch.PitchPID = new PID(PitchP.Value, PitchI.Value, PitchD.Value);

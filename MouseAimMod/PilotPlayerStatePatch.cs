@@ -142,6 +142,11 @@ public static class PilotPlayerStatePatch
         float rollInput = Mathf.Clamp(rollOutput, -1f, 1f);
         float yawInput = Mathf.Clamp(yawOutput, -1f, 1f);
 
+        float scale = Plugin.OutputScale.Value;
+        pitchInput *= scale;
+        rollInput *= scale;
+        yawInput *= scale;
+
         if (controlInputs.pitch == 0f)
             controlInputs.pitch = pitchInput;
         if (controlInputs.roll == 0f)
