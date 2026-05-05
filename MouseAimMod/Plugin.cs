@@ -59,7 +59,7 @@ public class Plugin : BaseUnityPlugin
         CenteringGain = Config.Bind("General", "CenteringGain", 0.3f,
             new ConfigDescription("Roll centering strength gain",
                 new AcceptableValueRange<float>(0f, 1f)));
-        OutputScale = Config.Bind("General", "OutputScale", 0.5f,
+        OutputScale = Config.Bind("General", "OutputScale", 0.4f,
             new ConfigDescription("PID output scale (non-keyboard only). 1=full, 0=none",
                 new AcceptableValueRange<float>(0f, 1f)));
 
