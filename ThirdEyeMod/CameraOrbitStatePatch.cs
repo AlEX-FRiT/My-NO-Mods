@@ -17,28 +17,28 @@ public static class CameraOrbitStatePatch
         if (!Plugin.Enabled.Value)
             return true;
 
+        // Clamp
         if (___panView >  180f) ___panView -= 360f;
         if (___panView < -180f) ___panView += 360f;
         if (___tiltView >  89f) ___tiltView =  89f;
         if (___tiltView < -89f) ___tiltView = -89f;
 
+        // Rotation: mouse-driven
         cam.transform.rotation = Quaternion.Euler(___tiltView, ___panView, 0f);
+
+        // Position: behind and above aircraft, offset by yaw and pitch
+        float cameraPitch = cam.transform.eulerAngles.x;
+        if (cameraPitch > 180f) cameraPitch -= 360f;
+        float lookdownAngle = cameraPitch + Plugin.CameraAngle.Value;
+        float cameraDistance = Plugin.CameraDistance.Value;
+
+        Quaternion horizontalRot = Quaternion.Euler(0f, cam.transform.eulerAngles.y, 0f);
+        Quaternion elevationRot = Quaternion.Euler(lookdownAngle, 0f, 0f);
+        Vector3 behindAndAbove = elevationRot * Vector3.back;
+
         cam.transform.position = cam.cameraPivot.position
-            + CameraMove(cam.transform.eulerAngles.y, cam.transform.eulerAngles.x);
+            + horizontalRot * behindAndAbove * cameraDistance;
 
         return false;
-    }
-
-    private static Vector3 CameraMove(float yawAngle, float pitchAngle)
-    {
-        // pitch
-        float pitch = pitchAngle;
-        if (pitch > 180f) pitch -= 360f;
-        float normalized = (-pitch + 90f) / 180f;
-        var upward = new Vector3(0f, Mathf.Pow(1 - normalized, Plugin.VerticalCurve.Value), 0f);
-        // yaw
-        float rad = yawAngle * Mathf.Deg2Rad;
-        var backward = new Vector3(Mathf.Sin(rad) * Mathf.Pow(normalized, Plugin.HorizontalCurve.Value), 0f, Mathf.Cos(rad) * Mathf.Pow(normalized, Plugin.HorizontalCurve.Value));
-        return (-backward + upward) * Plugin.CameraDistance.Value;
     }
 }

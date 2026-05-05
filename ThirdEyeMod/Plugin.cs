@@ -13,8 +13,7 @@ public class Plugin : BaseUnityPlugin
 
     internal static ConfigEntry<bool> Enabled;
     internal static ConfigEntry<float> CameraDistance;
-    internal static ConfigEntry<float> VerticalCurve;
-    internal static ConfigEntry<float> HorizontalCurve;
+    internal static ConfigEntry<float> CameraAngle;
 
     private Harmony _harmony;
 
@@ -28,12 +27,9 @@ public class Plugin : BaseUnityPlugin
         CameraDistance = Config.Bind("Camera", "Distance", 30f,
             new ConfigDescription("Camera distance from aircraft",
                 new AcceptableValueRange<float>(5f, 200f)));
-        VerticalCurve = Config.Bind("Camera", "VerticalCurve", 1.8f,
-            new ConfigDescription("Vertical height curve power: <1=bottom-flat, >1=top-flat",
-                new AcceptableValueRange<float>(0.1f, 5f)));
-        HorizontalCurve = Config.Bind("Camera", "HorizontalCurve", 0.6f,
-            new ConfigDescription("Horizontal distance curve: <1=forward-bias, >1=rear-bias",
-                new AcceptableValueRange<float>(0.1f, 5f)));
+        CameraAngle = Config.Bind("Camera", "Angle", 15f,
+            new ConfigDescription("Camera pitch angle below horizontal",
+                new AcceptableValueRange<float>(0f, 90f)));
 
         _harmony = new Harmony("nuclearoption.thirdeyemod");
         _harmony.PatchAll();
