@@ -4,7 +4,7 @@ using HarmonyLib;
 
 namespace HorizonLineMod;
 
-[BepInPlugin("nuclearoption.horizonlinemod", "HorizonLineMod", "1.0.0")]
+[BepInPlugin("nuclearoption.horizonlinemod", "Horizon Line Mod", "1.0.0")]
 [BepInProcess("NuclearOption.exe")]
 public class Plugin : BaseUnityPlugin
 {

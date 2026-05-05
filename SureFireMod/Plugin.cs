@@ -5,7 +5,7 @@ using HarmonyLib;
 
 namespace SureFireMod;
 
-[BepInPlugin("nuclearoption.surefiremod", "SureFire Mod", "1.0.0")]
+[BepInPlugin("nuclearoption.surefiremod", "Sure Fire Mod", "1.0.0")]
 [BepInProcess("NuclearOption.exe")]
 public class Plugin : BaseUnityPlugin
 {
