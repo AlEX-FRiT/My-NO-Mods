@@ -134,9 +134,10 @@ public static class PilotPlayerStatePatch
             pidsInitialized = true;
         }
 
-        float pitchOutput = PitchPID.GetOutput(pitchError, pitchRate, 2f, Time.fixedDeltaTime);
-        float rollOutput = RollPID.GetOutput(rollError, -rollRate, 2f, Time.fixedDeltaTime);
-        float yawOutput = YawPID.GetOutput(yawError, -yawRate, 2f, Time.fixedDeltaTime);
+        float ith = Plugin.IThreshold.Value;
+        float pitchOutput = PitchPID.GetOutput(pitchError, pitchRate, ith, Time.fixedDeltaTime);
+        float rollOutput = RollPID.GetOutput(rollError, -rollRate, ith, Time.fixedDeltaTime);
+        float yawOutput = YawPID.GetOutput(yawError, -yawRate, ith, Time.fixedDeltaTime);
 
         float pitchInput = Mathf.Clamp(pitchOutput, -1f, 1f);
         float rollInput = Mathf.Clamp(rollOutput, -1f, 1f);

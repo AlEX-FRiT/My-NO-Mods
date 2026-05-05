@@ -28,6 +28,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> CenteringRange;
     internal static ConfigEntry<float> CenteringGain;
     internal static ConfigEntry<float> OutputScale;
+    internal static ConfigEntry<float> IThreshold;
     private Harmony _harmony;
 
     private void Awake()
@@ -62,6 +63,9 @@ public class Plugin : BaseUnityPlugin
         OutputScale = Config.Bind("General", "OutputScale", 0.4f,
             new ConfigDescription("PID output scale (non-keyboard only). 1=full, 0=none",
                 new AcceptableValueRange<float>(0f, 1f)));
+        IThreshold = Config.Bind("PID", "IThreshold", 2f,
+            new ConfigDescription("Error (deg) above which integral is zeroed",
+                new AcceptableValueRange<float>(0.5f, 20f)));
 
         PilotPlayerStatePatch.PitchPID = new PID(PitchP.Value, PitchI.Value, PitchD.Value);
         PilotPlayerStatePatch.RollPID  = new PID(RollP.Value, RollI.Value, RollD.Value);
