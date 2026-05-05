@@ -26,7 +26,7 @@ public class Plugin : BaseUnityPlugin
 
         CameraDistance = Config.Bind("Camera", "Distance", 30f,
             new ConfigDescription("Camera distance from aircraft",
-                new AcceptableValueRange<float>(5f, 200f)));
+                new AcceptableValueRange<float>(5f, 50f)));
         CameraAngle = Config.Bind("Camera", "Angle", 15f,
             new ConfigDescription("Camera pitch angle below horizontal",
                 new AcceptableValueRange<float>(0f, 90f)));
