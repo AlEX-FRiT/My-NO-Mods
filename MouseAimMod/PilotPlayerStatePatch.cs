@@ -113,11 +113,6 @@ public static class PilotPlayerStatePatch
             verticalDeviation = Mathf.Sign(verticalDeviation) * 90f;
         }
 
-        Vector3 angularVel = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity) * Mathf.Rad2Deg;
-        float pitchRate = angularVel.x;
-        float yawRate = angularVel.y;
-        float rollRate = angularVel.z;
-
         float pitchError = -verticalDeviation;
         float yawError = horizontalDeviation;
 
@@ -139,9 +134,9 @@ public static class PilotPlayerStatePatch
             pidsInitialized = true;
         }
 
-        float pitchOutput = PitchPID.GetOutput(pitchError, pitchRate, Plugin.PitchIThreshold.Value, Time.fixedDeltaTime);
-        float rollOutput = RollPID.GetOutput(rollError, -rollRate, Plugin.RollIThreshold.Value, Time.fixedDeltaTime);
-        float yawOutput = YawPID.GetOutput(yawError, -yawRate, Plugin.YawIThreshold.Value, Time.fixedDeltaTime);
+        float pitchOutput = PitchPID.GetOutput(pitchError, Plugin.PitchIThreshold.Value, Time.fixedDeltaTime);
+        float rollOutput = RollPID.GetOutput(rollError, Plugin.RollIThreshold.Value, Time.fixedDeltaTime);
+        float yawOutput = YawPID.GetOutput(yawError, Plugin.YawIThreshold.Value, Time.fixedDeltaTime);
 
         ClampPI(Traverse.Create((object)PitchPID), Plugin.PitchILimit.Value);
         ClampPI(Traverse.Create((object)RollPID), Plugin.RollILimit.Value);
