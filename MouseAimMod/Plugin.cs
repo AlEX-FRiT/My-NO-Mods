@@ -52,10 +52,10 @@ public class Plugin : BaseUnityPlugin
         PitchP = Config.Bind("PID - Pitch", "P", 0.03f, "Pitch PID proportional gain");
         PitchI = Config.Bind("PID - Pitch", "I", 0.01f,  "Pitch PID integral gain");
         PitchD = Config.Bind("PID - Pitch", "D", 0.005f, "Pitch PID derivative gain");
-        PitchILimit = Config.Bind("Pitch - Modify", "ILimit", 0.5f,
+        PitchILimit = Config.Bind("Pitch - Modify", "ILimit", 2f,
             new ConfigDescription("Pitch integral output clamp",
                 new AcceptableValueRange<float>(0f, 2f)));
-        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 15f,
+        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 180f,
             new ConfigDescription("Pitch error (deg) above which integral is zeroed",
                 new AcceptableValueRange<float>(0.5f, 180f)));
         PitchScale = Config.Bind("Pitch - Modify", "Scale", 0.4f,
@@ -65,10 +65,10 @@ public class Plugin : BaseUnityPlugin
         RollP = Config.Bind("Roll - PID", "P", 0.03f,  "Roll PID proportional gain");
         RollI = Config.Bind("Roll - PID", "I", 0.005f, "Roll PID integral gain");
         RollD = Config.Bind("Roll - PID", "D", 0.002f, "Roll PID derivative gain");
-        RollILimit = Config.Bind("Roll - Modify", "ILimit", 0.5f,
+        RollILimit = Config.Bind("Roll - Modify", "ILimit", 2f,
             new ConfigDescription("Roll integral output clamp",
                 new AcceptableValueRange<float>(0f, 2f)));
-        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 15f,
+        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 180f,
             new ConfigDescription("Roll error (deg) above which integral is zeroed",
                 new AcceptableValueRange<float>(0.5f, 180f)));
         RollScale = Config.Bind("Roll - Modify", "Scale", 0.4f,
@@ -78,17 +78,17 @@ public class Plugin : BaseUnityPlugin
         YawP = Config.Bind("Yaw - PID", "P", 0.1f,  "Yaw PID proportional gain");
         YawI = Config.Bind("Yaw - PID", "I", 0.1f,  "Yaw PID integral gain");
         YawD = Config.Bind("Yaw - PID", "D", 0.05f, "Yaw PID derivative gain");
-        YawILimit = Config.Bind("Yaw - Modify", "ILimit", 0.5f,
+        YawILimit = Config.Bind("Yaw - Modify", "ILimit", 2f,
             new ConfigDescription("Yaw integral output clamp",
                 new AcceptableValueRange<float>(0f, 2f)));
-        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 15f,
+        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 180f,
             new ConfigDescription("Yaw error (deg) above which integral is zeroed",
                 new AcceptableValueRange<float>(0.5f, 180f)));
         YawScale = Config.Bind("Yaw - Modify", "Scale", 0.4f,
             new ConfigDescription("Yaw output scale",
                 new AcceptableValueRange<float>(0f, 1f)));
 
-        RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", true, "Enable roll/yaw balance attenuation");
+        RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
         YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,
             new ConfigDescription("Total view deviation (deg) where yaw reduction begins",
                 new AcceptableValueRange<float>(0f, 180f)));
