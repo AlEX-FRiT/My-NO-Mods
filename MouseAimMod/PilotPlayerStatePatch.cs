@@ -105,8 +105,13 @@ public static class PilotPlayerStatePatch
         Vector3 viewDirection = Camera.main.transform.forward;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
 
-        float horizontalDeviation = Mathf.Atan2(localTarget.x, localTarget.z) * Mathf.Rad2Deg;
-        float verticalDeviation = Mathf.Atan2(localTarget.y, localTarget.z) * Mathf.Rad2Deg;
+        float horizontalDeviation = Mathf.Asin(Mathf.Clamp(localTarget.x, -1f, 1f)) * Mathf.Rad2Deg;
+        float verticalDeviation   = Mathf.Asin(Mathf.Clamp(localTarget.y, -1f, 1f)) * Mathf.Rad2Deg;
+
+        if (localTarget.z < 0f)
+        {
+            verticalDeviation = Mathf.Sign(verticalDeviation) * 90f;
+        }
 
         Vector3 angularVel = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity) * Mathf.Rad2Deg;
         float pitchRate = angularVel.x;
@@ -134,19 +139,25 @@ public static class PilotPlayerStatePatch
             pidsInitialized = true;
         }
 
-        float ith = Plugin.IThreshold.Value;
-        float pitchOutput = PitchPID.GetOutput(pitchError, pitchRate, ith, Time.fixedDeltaTime);
-        float rollOutput = RollPID.GetOutput(rollError, -rollRate, ith, Time.fixedDeltaTime);
-        float yawOutput = YawPID.GetOutput(yawError, -yawRate, ith, Time.fixedDeltaTime);
+        float pitchOutput = PitchPID.GetOutput(pitchError, pitchRate, Plugin.PitchIThreshold.Value, Time.fixedDeltaTime);
+        float rollOutput = RollPID.GetOutput(rollError, -rollRate, Plugin.RollIThreshold.Value, Time.fixedDeltaTime);
+        float yawOutput = YawPID.GetOutput(yawError, -yawRate, Plugin.YawIThreshold.Value, Time.fixedDeltaTime);
 
-        float pitchInput = Mathf.Clamp(pitchOutput, -1f, 1f);
-        float rollInput = Mathf.Clamp(rollOutput, -1f, 1f);
-        float yawInput = Mathf.Clamp(yawOutput, -1f, 1f);
+        ClampPI(Traverse.Create((object)PitchPID), Plugin.PitchILimit.Value);
+        ClampPI(Traverse.Create((object)RollPID), Plugin.RollILimit.Value);
+        ClampPI(Traverse.Create((object)YawPID), Plugin.YawILimit.Value);
 
-        float scale = Plugin.OutputScale.Value;
-        pitchInput *= scale;
-        rollInput *= scale;
-        yawInput *= scale;
+        float yawScale = 1f;
+        if (Plugin.RollYawBalance.Value)
+        {
+            float totalDev = Vector3.Angle(aircraft.transform.forward, Camera.main.transform.forward);
+            yawScale = 1f - Mathf.Clamp01((totalDev - Plugin.YawAttenStart.Value) / (Plugin.YawAttenEnd.Value - Plugin.YawAttenStart.Value));
+        }
+        yawOutput *= yawScale;
+
+        float pitchInput = Mathf.Clamp(pitchOutput * Plugin.PitchScale.Value, -1f, 1f);
+        float rollInput = Mathf.Clamp(rollOutput * Plugin.RollScale.Value, -1f, 1f);
+        float yawInput = Mathf.Clamp(yawOutput * Plugin.YawScale.Value, -1f, 1f);
 
         if (controlInputs.pitch == 0f)
             controlInputs.pitch = pitchInput;
@@ -154,5 +165,12 @@ public static class PilotPlayerStatePatch
             controlInputs.roll = rollInput;
         if (controlInputs.yaw == 0f)
             controlInputs.yaw = yawInput;
+    }
+
+    private static void ClampPI(Traverse pid, float limit)
+    {
+        float i = pid.Field("i").GetValue<float>();
+        i = Mathf.Clamp(i, -limit, limit);
+        pid.Field("i").SetValue(i);
     }
 }
