@@ -119,6 +119,10 @@ public static class PilotPlayerStatePatch
             verticalDeviation = Mathf.Sign(verticalDeviation);
         }
 
+        float exp = Plugin.ErrorExp.Value;
+        horizontalDeviation = Mathf.Sign(horizontalDeviation) * Mathf.Pow(Mathf.Abs(horizontalDeviation), exp);
+        verticalDeviation   = Mathf.Sign(verticalDeviation)   * Mathf.Pow(Mathf.Abs(verticalDeviation),   exp);
+
         float pitchError = -verticalDeviation;
         float yawError = horizontalDeviation;
 

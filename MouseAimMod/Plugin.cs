@@ -37,6 +37,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> PitchTrackingTc;
     internal static ConfigEntry<float> RollTrackingTc;
     internal static ConfigEntry<float> YawTrackingTc;
+    internal static ConfigEntry<float> ErrorExp;
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
     internal static ConfigEntry<bool> RollYawBalance;
@@ -55,43 +56,46 @@ public class Plugin : BaseUnityPlugin
         Logger.LogInfo("Mouse Aim Mod is loaded!");
 
         PitchP = Config.Bind("PID - Pitch", "P", 3.25f, "Pitch PID proportional gain (sin-unit input)");
-        PitchI = Config.Bind("PID - Pitch", "I", 0.75f, "Pitch PID integral gain (sin-unit input)");
+        PitchI = Config.Bind("PID - Pitch", "I", 0.5f, "Pitch PID integral gain (sin-unit input)");
         PitchD = Config.Bind("PID - Pitch", "D", 1f, "Pitch PID derivative gain (sin-unit input)");
-        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 1f,
+        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 0.3f,
             new ConfigDescription("Pitch error above which integral is zeroed. Default > max sin, effectively disabled",
                 new AcceptableValueRange<float>(0f, 1f)));
         PitchScale = Config.Bind("Pitch - Modify", "Scale", 1f,
             new ConfigDescription("Pitch output scale",
                 new AcceptableValueRange<float>(0f, 1f)));
-        PitchTrackingTc = Config.Bind("Pitch - Modify", "TrackingTc", 10f,
+        PitchTrackingTc = Config.Bind("Pitch - Modify", "TrackingTc", 0.1f,
             new ConfigDescription("Pitch anti-windup tracking time constant (s). Smaller = faster unwind",
                 new AcceptableValueRange<float>(0.01f, 10f)));
 
         RollP = Config.Bind("Roll - PID", "P", 2f,  "Roll PID proportional gain (sin-unit input)");
-        RollI = Config.Bind("Roll - PID", "I", 0.25f, "Roll PID integral gain (sin-unit input)");
+        RollI = Config.Bind("Roll - PID", "I", 0f, "Roll PID integral gain (sin-unit input)");
         RollD = Config.Bind("Roll - PID", "D", 1f, "Roll PID derivative gain (sin-unit input)");
-        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 1f,
+        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 0.3f,
             new ConfigDescription("Roll error above which integral is zeroed. Default > max sin, effectively disabled",
                 new AcceptableValueRange<float>(0f, 1f)));
         RollScale = Config.Bind("Roll - Modify", "Scale", 1f,
             new ConfigDescription("Roll output scale",
                 new AcceptableValueRange<float>(0f, 1f)));
-        RollTrackingTc = Config.Bind("Roll - Modify", "TrackingTc", 10f,
+        RollTrackingTc = Config.Bind("Roll - Modify", "TrackingTc", 0.1f,
             new ConfigDescription("Roll anti-windup tracking time constant (s). Smaller = faster unwind",
                 new AcceptableValueRange<float>(0.01f, 10f)));
 
         YawP = Config.Bind("Yaw - PID", "P", 2f,  "Yaw PID proportional gain (sin-unit input)");
-        YawI = Config.Bind("Yaw - PID", "I", 0.25f,  "Yaw PID integral gain (sin-unit input)");
+        YawI = Config.Bind("Yaw - PID", "I", 0.4f, "Yaw PID integral gain (sin-unit input)");
         YawD = Config.Bind("Yaw - PID", "D", 1f, "Yaw PID derivative gain (sin-unit input)");
-        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 1f,
+        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 0.3f,
             new ConfigDescription("Yaw error above which integral is zeroed. Default > max sin, effectively disabled",
                 new AcceptableValueRange<float>(0f, 1f)));
         YawScale = Config.Bind("Yaw - Modify", "Scale", 1f,
             new ConfigDescription("Yaw output scale",
                 new AcceptableValueRange<float>(0f, 1f)));
-        YawTrackingTc = Config.Bind("Yaw - Modify", "TrackingTc", 10f,
+        YawTrackingTc = Config.Bind("Yaw - Modify", "TrackingTc", 0.1f,
             new ConfigDescription("Yaw anti-windup tracking time constant (s). Smaller = faster unwind",
                 new AcceptableValueRange<float>(0.01f, 10f)));
+        ErrorExp = Config.Bind("General", "ErrorExp", 0.9f,
+            new ConfigDescription("Error power exponent. 1=linear, >1=suppress small errors",
+                new AcceptableValueRange<float>(0.5f, 2f)));
 
         RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
         YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,
