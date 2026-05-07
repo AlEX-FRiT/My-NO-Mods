@@ -31,16 +31,21 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> PitchScale;
     internal static ConfigEntry<float> RollScale;
     internal static ConfigEntry<float> YawScale;
-    internal static ConfigEntry<float> PitchILimit;
-    internal static ConfigEntry<float> RollILimit;
-    internal static ConfigEntry<float> YawILimit;
     internal static ConfigEntry<float> PitchIThreshold;
     internal static ConfigEntry<float> RollIThreshold;
     internal static ConfigEntry<float> YawIThreshold;
-
+    internal static ConfigEntry<float> PitchTrackingTc;
+    internal static ConfigEntry<float> RollTrackingTc;
+    internal static ConfigEntry<float> YawTrackingTc;
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
     internal static ConfigEntry<bool> RollYawBalance;
+
+    internal static ConfigEntry<bool> SchedEnabled;
+    internal static ConfigEntry<float> SchedRefQ;
+    internal static ConfigEntry<float> SchedExp;
+    internal static ConfigEntry<float> SchedClampMin;
+    internal static ConfigEntry<float> SchedClampMax;
 
     private Harmony _harmony;
 
@@ -49,44 +54,44 @@ public class Plugin : BaseUnityPlugin
         Logger = base.Logger;
         Logger.LogInfo("Mouse Aim Mod is loaded!");
 
-        PitchP = Config.Bind("PID - Pitch", "P", 0.03f, "Pitch PID proportional gain");
-        PitchI = Config.Bind("PID - Pitch", "I", 0.01f,  "Pitch PID integral gain");
-        PitchD = Config.Bind("PID - Pitch", "D", 0.005f, "Pitch PID derivative gain");
-        PitchILimit = Config.Bind("Pitch - Modify", "ILimit", 2f,
-            new ConfigDescription("Pitch integral output clamp",
-                new AcceptableValueRange<float>(0f, 2f)));
-        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 180f,
-            new ConfigDescription("Pitch error (deg) above which integral is zeroed",
-                new AcceptableValueRange<float>(0.5f, 180f)));
-        PitchScale = Config.Bind("Pitch - Modify", "Scale", 0.4f,
+        PitchP = Config.Bind("PID - Pitch", "P", 3.25f, "Pitch PID proportional gain (sin-unit input)");
+        PitchI = Config.Bind("PID - Pitch", "I", 0.75f, "Pitch PID integral gain (sin-unit input)");
+        PitchD = Config.Bind("PID - Pitch", "D", 1f, "Pitch PID derivative gain (sin-unit input)");
+        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 1f,
+            new ConfigDescription("Pitch error above which integral is zeroed. Default > max sin, effectively disabled",
+                new AcceptableValueRange<float>(0f, 1f)));
+        PitchScale = Config.Bind("Pitch - Modify", "Scale", 1f,
             new ConfigDescription("Pitch output scale",
                 new AcceptableValueRange<float>(0f, 1f)));
+        PitchTrackingTc = Config.Bind("Pitch - Modify", "TrackingTc", 10f,
+            new ConfigDescription("Pitch anti-windup tracking time constant (s). Smaller = faster unwind",
+                new AcceptableValueRange<float>(0.01f, 10f)));
 
-        RollP = Config.Bind("Roll - PID", "P", 0.03f,  "Roll PID proportional gain");
-        RollI = Config.Bind("Roll - PID", "I", 0.005f, "Roll PID integral gain");
-        RollD = Config.Bind("Roll - PID", "D", 0.002f, "Roll PID derivative gain");
-        RollILimit = Config.Bind("Roll - Modify", "ILimit", 2f,
-            new ConfigDescription("Roll integral output clamp",
-                new AcceptableValueRange<float>(0f, 2f)));
-        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 180f,
-            new ConfigDescription("Roll error (deg) above which integral is zeroed",
-                new AcceptableValueRange<float>(0.5f, 180f)));
-        RollScale = Config.Bind("Roll - Modify", "Scale", 0.4f,
+        RollP = Config.Bind("Roll - PID", "P", 2f,  "Roll PID proportional gain (sin-unit input)");
+        RollI = Config.Bind("Roll - PID", "I", 0.25f, "Roll PID integral gain (sin-unit input)");
+        RollD = Config.Bind("Roll - PID", "D", 1f, "Roll PID derivative gain (sin-unit input)");
+        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 1f,
+            new ConfigDescription("Roll error above which integral is zeroed. Default > max sin, effectively disabled",
+                new AcceptableValueRange<float>(0f, 1f)));
+        RollScale = Config.Bind("Roll - Modify", "Scale", 1f,
             new ConfigDescription("Roll output scale",
                 new AcceptableValueRange<float>(0f, 1f)));
+        RollTrackingTc = Config.Bind("Roll - Modify", "TrackingTc", 10f,
+            new ConfigDescription("Roll anti-windup tracking time constant (s). Smaller = faster unwind",
+                new AcceptableValueRange<float>(0.01f, 10f)));
 
-        YawP = Config.Bind("Yaw - PID", "P", 0.1f,  "Yaw PID proportional gain");
-        YawI = Config.Bind("Yaw - PID", "I", 0.1f,  "Yaw PID integral gain");
-        YawD = Config.Bind("Yaw - PID", "D", 0.05f, "Yaw PID derivative gain");
-        YawILimit = Config.Bind("Yaw - Modify", "ILimit", 2f,
-            new ConfigDescription("Yaw integral output clamp",
-                new AcceptableValueRange<float>(0f, 2f)));
-        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 180f,
-            new ConfigDescription("Yaw error (deg) above which integral is zeroed",
-                new AcceptableValueRange<float>(0.5f, 180f)));
-        YawScale = Config.Bind("Yaw - Modify", "Scale", 0.4f,
+        YawP = Config.Bind("Yaw - PID", "P", 2f,  "Yaw PID proportional gain (sin-unit input)");
+        YawI = Config.Bind("Yaw - PID", "I", 0.25f,  "Yaw PID integral gain (sin-unit input)");
+        YawD = Config.Bind("Yaw - PID", "D", 1f, "Yaw PID derivative gain (sin-unit input)");
+        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 1f,
+            new ConfigDescription("Yaw error above which integral is zeroed. Default > max sin, effectively disabled",
+                new AcceptableValueRange<float>(0f, 1f)));
+        YawScale = Config.Bind("Yaw - Modify", "Scale", 1f,
             new ConfigDescription("Yaw output scale",
                 new AcceptableValueRange<float>(0f, 1f)));
+        YawTrackingTc = Config.Bind("Yaw - Modify", "TrackingTc", 10f,
+            new ConfigDescription("Yaw anti-windup tracking time constant (s). Smaller = faster unwind",
+                new AcceptableValueRange<float>(0.01f, 10f)));
 
         RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
         YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,
@@ -96,12 +101,27 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Total view deviation (deg) where yaw reaches zero",
                 new AcceptableValueRange<float>(0f, 180f)));
 
+        SchedEnabled = Config.Bind("Gain Schedule", "Enabled", false,
+            new ConfigDescription("Scale PID gains by dynamic pressure. Disabled = flat gains for all altitudes"));
+        SchedRefQ = Config.Bind("Gain Schedule", "RefQ", 18750f,
+            new ConfigDescription("Reference dynamic pressure (Pa) where base gains were tuned. ~175 m/s at sea level",
+                new AcceptableValueRange<float>(1000f, 100000f)));
+        SchedExp = Config.Bind("Gain Schedule", "Exp", 0.3f,
+            new ConfigDescription("Power-law exponent. 0 = no scaling, 0.3 = mild, 1.0 = linear compensation",
+                new AcceptableValueRange<float>(0f, 2f)));
+        SchedClampMin = Config.Bind("Gain Schedule", "ClampMin", 0.1f,
+            new ConfigDescription("Minimum gain multiplier (safety floor)",
+                new AcceptableValueRange<float>(0.01f, 1f)));
+        SchedClampMax = Config.Bind("Gain Schedule", "ClampMax", 5f,
+            new ConfigDescription("Maximum gain multiplier (safety ceiling)",
+                new AcceptableValueRange<float>(1f, 20f)));
+
         MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
         InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
         RollCentering = Config.Bind("Roll Centering", "RollCentering", false, "Auto roll back to level when camera is near center");
-        CenteringRange = Config.Bind("Roll Centering", "CenteringRange", 15f,
-            new ConfigDescription("Horizontal deviation range for roll centering (degrees)",
-                new AcceptableValueRange<float>(0.5f, 20f)));
+        CenteringRange = Config.Bind("Roll Centering", "CenteringRange", 0.259f,
+            new ConfigDescription("Horizontal deviation range for roll centering (sin units, ~15°)",
+                new AcceptableValueRange<float>(0.01f, 0.35f)));
         CenteringGain = Config.Bind("Roll Centering", "CenteringGain", 0.3f,
             new ConfigDescription("Roll centering strength gain",
                 new AcceptableValueRange<float>(0f, 1f)));
