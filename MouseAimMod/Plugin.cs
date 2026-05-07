@@ -1,9 +1,16 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
 using BepInEx;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
 
 namespace MouseAimMod;
+
+public enum PresetSlot { Slot1, Slot2, Slot3, Slot4, Slot5 }
 
 [BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "1.0.0")]
 [BepInProcess("NuclearOption.exe")]
@@ -38,15 +45,18 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> RollTrackingTc;
     internal static ConfigEntry<float> YawTrackingTc;
     internal static ConfigEntry<float> ErrorExp;
+
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
     internal static ConfigEntry<bool> RollYawBalance;
-
     internal static ConfigEntry<bool> SchedEnabled;
     internal static ConfigEntry<float> SchedRefQ;
     internal static ConfigEntry<float> SchedExp;
     internal static ConfigEntry<float> SchedClampMin;
     internal static ConfigEntry<float> SchedClampMax;
+
+    internal static ConfigEntry<PresetSlot> ActivePreset;
+    internal static ConfigEntry<bool> SavePreset;
 
     private Harmony _harmony;
 
@@ -132,6 +142,11 @@ public class Plugin : BaseUnityPlugin
         HoverExitAngle = Config.Bind("Hover", "ExitAngle", 20f,
             new ConfigDescription("Pitch or roll angle exceeding this disables hover throttle",
                 new AcceptableValueRange<float>(5f, 60f)));
+        ActivePreset = Config.Bind("Presets", "ActivePreset", PresetSlot.Slot1, "Select preset slot. Changing loads that preset.");
+        SavePreset = Config.Bind("Presets", "SavePreset", false, "Toggle ON to save current config to active preset.");
+
+        ActivePreset.SettingChanged += (_, _) => LoadPreset(ActivePreset.Value);
+        SavePreset.SettingChanged += (_, _) => { if (SavePreset.Value) { SaveToPreset(ActivePreset.Value); SavePreset.Value = false; } };
 
         PilotPlayerStatePatch.PitchPID = new PID(PitchP.Value, PitchI.Value, PitchD.Value);
         PilotPlayerStatePatch.RollPID  = new PID(RollP.Value, RollI.Value, RollD.Value);
@@ -178,5 +193,69 @@ public class Plugin : BaseUnityPlugin
         PilotPlayerStatePatch.PitchPID.Reseti();
         PilotPlayerStatePatch.RollPID.Reseti();
         PilotPlayerStatePatch.YawPID.Reseti();
+    }
+
+    private static string PresetPath(PresetSlot slot)
+    {
+        string dir = Path.Combine(Paths.ConfigPath, "nuclearoption.mouseaimmod_presets");
+        Directory.CreateDirectory(dir);
+        return Path.Combine(dir, $"preset{(int)slot + 1}.cfg");
+    }
+
+    private static void SaveToPreset(PresetSlot slot)
+    {
+        var fields = typeof(Plugin).GetFields(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
+            .Where(f => typeof(ConfigEntryBase).IsAssignableFrom(f.FieldType));
+
+        var sections = new Dictionary<string, List<(string key, string val)>>();
+        foreach (var f in fields)
+        {
+            if (f.Name == "ActivePreset" || f.Name == "SavePreset") continue;
+            var entry = (ConfigEntryBase)f.GetValue(null);
+            if (entry == null) continue;
+            var sec = entry.Definition.Section;
+            if (!sections.ContainsKey(sec)) sections[sec] = new();
+            sections[sec].Add((entry.Definition.Key, entry.GetSerializedValue() ?? ""));
+        }
+        using var sw = new StreamWriter(PresetPath(slot));
+        foreach (var sec in sections.OrderBy(s => s.Key))
+        {
+            sw.WriteLine($"[{sec.Key}]");
+            foreach (var (k, v) in sec.Value)
+                sw.WriteLine($"{k} = {v}");
+            sw.WriteLine();
+        }
+    }
+
+    private static void LoadPreset(PresetSlot slot)
+    {
+        string path = PresetPath(slot);
+        if (!File.Exists(path)) return;
+
+        var values = new Dictionary<(string, string), string>();
+        string sec = "";
+        foreach (var line in File.ReadAllLines(path))
+        {
+            var t = line.Trim();
+            if (t.StartsWith("[") && t.EndsWith("]")) { sec = t.Trim('[', ']'); continue; }
+            int eq = t.IndexOf('=');
+            if (eq < 0) continue;
+            values[(sec, t.Substring(0, eq).Trim())] = t.Substring(eq + 1).Trim();
+        }
+
+        var fields = typeof(Plugin).GetFields(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
+            .Where(f => typeof(ConfigEntryBase).IsAssignableFrom(f.FieldType));
+
+        foreach (var f in fields)
+        {
+            if (f.Name == "ActivePreset" || f.Name == "SavePreset") continue;
+            var entry = (ConfigEntryBase)f.GetValue(null);
+            if (entry == null) continue;
+            if (values.TryGetValue((entry.Definition.Section, entry.Definition.Key), out var val))
+            {
+                var boxed = TomlTypeConverter.ConvertToValue(val, entry.SettingType);
+                if (boxed != null) entry.BoxedValue = boxed;
+            }
+        }
     }
 }
