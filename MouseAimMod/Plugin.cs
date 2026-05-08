@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using BepInEx;
+using UnityEngine;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
@@ -14,6 +15,7 @@ public enum PresetSlot { Slot1, Slot2, Slot3, Slot4, Slot5 }
 
 [BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "1.0.0")]
 [BepInProcess("NuclearOption.exe")]
+[BepInDependency("nuclearoption.debuggraphmod", BepInDependency.DependencyFlags.SoftDependency)]
 public class Plugin : BaseUnityPlugin
 {
     internal static new ManualLogSource Logger;
@@ -57,6 +59,13 @@ public class Plugin : BaseUnityPlugin
 
     internal static ConfigEntry<PresetSlot> ActivePreset;
     internal static ConfigEntry<bool> SavePreset;
+    internal static ConfigEntry<bool> LoadPreset;
+
+    private static bool _debugAvailable;
+    private static object _pitchErrStream, _pitchOutStream;
+    private static object _rollErrStream, _rollOutStream;
+    private static object _yawErrStream, _yawOutStream;
+    private static MethodInfo _debugPushMethod;
 
     private Harmony _harmony;
 
@@ -142,11 +151,12 @@ public class Plugin : BaseUnityPlugin
         HoverExitAngle = Config.Bind("Hover", "ExitAngle", 20f,
             new ConfigDescription("Pitch or roll angle exceeding this disables hover throttle",
                 new AcceptableValueRange<float>(5f, 60f)));
-        ActivePreset = Config.Bind("Presets", "ActivePreset", PresetSlot.Slot1, "Select preset slot. Changing loads that preset.");
+        ActivePreset = Config.Bind("Presets", "ActivePreset", PresetSlot.Slot1, "Select preset slot for save/load.");
         SavePreset = Config.Bind("Presets", "SavePreset", false, "Toggle ON to save current config to active preset.");
+        LoadPreset = Config.Bind("Presets", "LoadPreset", false, "Toggle ON to load config from active preset.");
 
-        ActivePreset.SettingChanged += (_, _) => LoadPreset(ActivePreset.Value);
         SavePreset.SettingChanged += (_, _) => { if (SavePreset.Value) { SaveToPreset(ActivePreset.Value); SavePreset.Value = false; } };
+        LoadPreset.SettingChanged += (_, _) => { if (LoadPreset.Value) { LoadFromPreset(ActivePreset.Value); LoadPreset.Value = false; } };
 
         PilotPlayerStatePatch.PitchPID = new PID(PitchP.Value, PitchI.Value, PitchD.Value);
         PilotPlayerStatePatch.RollPID  = new PID(RollP.Value, RollI.Value, RollD.Value);
@@ -165,6 +175,11 @@ public class Plugin : BaseUnityPlugin
 
         _harmony = new Harmony("nuclearoption.mouseaimmod");
         _harmony.PatchAll();
+    }
+
+    private void Start()
+    {
+        InitDebugCharts();
     }
 
     private void OnDestroy()
@@ -202,6 +217,60 @@ public class Plugin : BaseUnityPlugin
         return Path.Combine(dir, $"preset{(int)slot + 1}.cfg");
     }
 
+    private void InitDebugCharts()
+    {
+        try
+        {
+            var regType = Type.GetType("DebugGraphMod.GraphRegistry, DebugGraphMod");
+            if (regType == null) return;
+
+            var chartTypeEnum = Type.GetType("DebugGraphMod.ChartType, DebugGraphMod");
+            var flowVal = Enum.Parse(chartTypeEnum, "Flow");
+            var createChart = regType.GetMethod("CreateChart");
+
+            var errChart = createChart.Invoke(null, new[] { flowVal, "Pitch", 480f, 200f, -1f, 1f, 600, null, null });
+            var outChart = createChart.Invoke(null, new[] { flowVal, "Roll", 480f, 200f, -1f, 1f, 600, null, null });
+            var yawChart  = createChart.Invoke(null, new[] { flowVal, "Yaw", 480f, 200f, -1f, 1f, 600, null, null });
+
+            var addStream = errChart.GetType().GetMethod("AddStream");
+            _pitchErrStream = addStream.Invoke(errChart, new object[] { "Err", Color.green });
+            _pitchOutStream = addStream.Invoke(errChart, new object[] { "Out", Color.yellow });
+
+            _rollErrStream = addStream.Invoke(outChart, new object[] { "Err", Color.green });
+            _rollOutStream = addStream.Invoke(outChart, new object[] { "Out", Color.yellow });
+
+            _yawErrStream = addStream.Invoke(yawChart, new object[] { "Err", Color.green });
+            _yawOutStream = addStream.Invoke(yawChart, new object[] { "Out", Color.yellow });
+
+            _debugAvailable = true;
+            Logger.LogInfo("DebugGraphMod charts registered");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogInfo($"DebugGraphMod not available: {ex.Message}");
+        }
+    }
+
+    internal static void PushDebugData(float pitchErr, float rollErr, float yawErr, float pitchOut, float rollOut, float yawOut)
+    {
+        if (!_debugAvailable) return;
+        try
+        {
+            if (_debugPushMethod == null)
+                _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
+            _debugPushMethod.Invoke(_pitchErrStream, new object[] { pitchErr });
+            _debugPushMethod.Invoke(_pitchOutStream, new object[] { pitchOut });
+            _debugPushMethod.Invoke(_rollErrStream, new object[] { rollErr });
+            _debugPushMethod.Invoke(_rollOutStream, new object[] { rollOut });
+            _debugPushMethod.Invoke(_yawErrStream, new object[] { yawErr });
+            _debugPushMethod.Invoke(_yawOutStream, new object[] { yawOut });
+        }
+        catch
+        {
+            _debugAvailable = false;
+        }
+    }
+
     private static void SaveToPreset(PresetSlot slot)
     {
         var fields = typeof(Plugin).GetFields(BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public)
@@ -210,7 +279,7 @@ public class Plugin : BaseUnityPlugin
         var sections = new Dictionary<string, List<(string key, string val)>>();
         foreach (var f in fields)
         {
-            if (f.Name == "ActivePreset" || f.Name == "SavePreset") continue;
+            if (f.Name is "ActivePreset" or "SavePreset" or "LoadPreset") continue;
             var entry = (ConfigEntryBase)f.GetValue(null);
             if (entry == null) continue;
             var sec = entry.Definition.Section;
@@ -227,7 +296,7 @@ public class Plugin : BaseUnityPlugin
         }
     }
 
-    private static void LoadPreset(PresetSlot slot)
+    private static void LoadFromPreset(PresetSlot slot)
     {
         string path = PresetPath(slot);
         if (!File.Exists(path)) return;
@@ -248,7 +317,7 @@ public class Plugin : BaseUnityPlugin
 
         foreach (var f in fields)
         {
-            if (f.Name == "ActivePreset" || f.Name == "SavePreset") continue;
+            if (f.Name is "ActivePreset" or "SavePreset" or "LoadPreset") continue;
             var entry = (ConfigEntryBase)f.GetValue(null);
             if (entry == null) continue;
             if (values.TryGetValue((entry.Definition.Section, entry.Definition.Key), out var val))

@@ -1,0 +1,11 @@
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\bin\Release\net472\DebugGraphMod.dll
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\bin\Release\net472\DebugGraphMod.pdb
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.csproj.AssemblyReference.cache
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\MyPluginInfo.cs
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.AssemblyInfoInputs.cache
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.AssemblyInfo.cs
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.csproj.CoreCompileInputs.cache
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.sourcelink.json
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.dll
+C:\Users\11033\OneDrive\.misc\ideas\game\nuclear option\DebugGraphMod\obj\Release\net472\DebugGraphMod.pdb
