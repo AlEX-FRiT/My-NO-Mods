@@ -42,7 +42,7 @@ Deploy output DLL to `BepInEx/plugins/ModName/ModName.dll`.
 |-----|-------------|
 | **DebugGraphMod** | Real-time signal visualization: floating IMGUI chart windows with GL-rendered line graphs. Other mods register data streams via static API. Toggle with F1 ConfigManager. |
 | **HorizonLineMod** | Adds a horizon line / attitude indicator HUD overlay |
-| **MouseAimMod** | Mouse-controlled aircraft aiming with roll auto-centering, hover throttle for VTOL, PID gain scheduling, ErrorExp, and preset save/load (5 slots). Soft-depends on DebugGraphMod for per-axis PID error/output graphs. |
+| **MouseAimMod** | Mouse-controlled aircraft aiming with MPC (golden-section + exact discrete model), roll auto-centering, hover throttle for VTOL, ErrorExp, preset save/load (5 slots), and StabilityKbOff toggle. Soft-depends on DebugGraphMod for per-axis error/output graphs. |
 | **SureFireMod** | Prevents firing laser-guided weapons when target is not lased |
 | **ThirdEyeMod** | Third-person camera overhaul: Orbit mode with mouse-driven view, HUD and minimap visible, aircraft-relative camera positioning |
 
