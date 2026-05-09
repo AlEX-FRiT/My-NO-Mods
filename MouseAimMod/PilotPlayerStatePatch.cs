@@ -6,8 +6,7 @@ namespace MouseAimMod;
 [HarmonyPatch(typeof(PilotPlayerState), "PlayerAxisControls")]
 public static class PilotPlayerStatePatch
 {
-    private static bool pidsInitialized;
-    private static float _mpcPrevUP, _mpcPrevUR, _mpcPrevUY;
+    private static bool _mpcInitialized;
     private static bool _stabilityKilled;
     private static bool _stabilityOrig;
 
@@ -57,50 +56,50 @@ public static class PilotPlayerStatePatch
             HoverThrottleController.ApplyHoverThrottle(controlInputs, aircraft);
 
         bool aimActive = Plugin.InvertFreeLook.Value ? freeLook : !freeLook;
-        if (!aimActive) { pidsInitialized = false; return; }
+        if (!aimActive) { _mpcInitialized = false; return; }
         if (Camera.main == null) return;
 
         Vector3 viewDirection = Camera.main.transform.forward;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
-        float hd = localTarget.x, vd = localTarget.y;
-        Vector3 av = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
+        float horizDev = localTarget.x, vertDev = localTarget.y;
+        Vector3 localAV = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
 
-        if (localTarget.z < 0f) vd = Mathf.Sign(vd);
+        if (localTarget.z < 0f) vertDev = Mathf.Sign(vertDev);
         float exp = Plugin.ErrorExp.Value;
-        hd = Mathf.Sign(hd) * Mathf.Pow(Mathf.Abs(hd), exp);
-        vd = Mathf.Sign(vd) * Mathf.Pow(Mathf.Abs(vd), exp);
+        horizDev = Mathf.Sign(horizDev) * Mathf.Pow(Mathf.Abs(horizDev), exp);
+        vertDev  = Mathf.Sign(vertDev)  * Mathf.Pow(Mathf.Abs(vertDev),  exp);
 
-        float pitchError = -vd, yawError = hd;
+        float pitchError = -vertDev, yawError = horizDev;
         float rollAngle = aircraft.transform.eulerAngles.z;
         if (rollAngle > 180f) rollAngle -= 360f;
-        float rollError = hd;
+        float rollError = horizDev;
         if (Plugin.RollCentering.Value)
         {
             float s = Mathf.Sin(rollAngle * Mathf.Deg2Rad);
-            float f = 1f - Mathf.Clamp01(Mathf.Abs(hd) / Plugin.CenteringRange.Value);
-            rollError = hd + s * f * Plugin.CenteringGain.Value;
+            float f = 1f - Mathf.Clamp01(Mathf.Abs(horizDev) / Plugin.CenteringRange.Value);
+            rollError = horizDev + s * f * Plugin.CenteringGain.Value;
         }
 
-        if (!pidsInitialized) { _mpcPrevUP = _mpcPrevUR = _mpcPrevUY = 0f; pidsInitialized = true; }
+        if (!_mpcInitialized) { _mpcInitialized = true; }
 
         float dt = Time.fixedDeltaTime;
-        float pO = Mpc(pitchError, av.x, dt, ref _mpcPrevUP, Plugin.MpcK_P.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty_P.Value);
-        float rO = Mpc(rollError,  av.z, dt, ref _mpcPrevUR, Plugin.MpcK_R.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty_R.Value);
-        float yO = Mpc(yawError,  av.y, dt, ref _mpcPrevUY, Plugin.MpcK_Y.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty_Y.Value);
+        float pitchOut = Mpc(pitchError, localAV.x, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
+        float rollOut  = Mpc(rollError,  localAV.z, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
+        float yawOut   = Mpc(yawError,   localAV.y, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
 
-        float ys = 1f;
+        float yawScale = 1f;
         if (Plugin.RollYawBalance.Value)
         {
             float d = Vector3.Angle(aircraft.transform.forward, Camera.main.transform.forward);
-            ys = 1f - Mathf.Clamp01((d - Plugin.YawAttenStart.Value) / (Plugin.YawAttenEnd.Value - Plugin.YawAttenStart.Value));
+            yawScale = 1f - Mathf.Clamp01((d - Plugin.YawAttenStart.Value) / (Plugin.YawAttenEnd.Value - Plugin.YawAttenStart.Value));
         }
-        yO *= ys;
+        yawOut *= yawScale;
 
-        Plugin.PushDebugData(pitchError, rollError, yawError, pO, rO, yO);
+        Plugin.PushDebugData(pitchError, rollError, yawError, pitchOut, rollOut, yawOut);
 
-        if (controlInputs.pitch == 0f) controlInputs.pitch = pO;
-        if (controlInputs.roll  == 0f) controlInputs.roll  = rO;
-        if (controlInputs.yaw   == 0f) controlInputs.yaw   = yO;
+        if (controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
+        if (controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
+        if (controlInputs.yaw   == 0f) controlInputs.yaw   = yawOut;
 
         if (keyboardPitch && Plugin.StabilityKbEnabled.Value && !_stabilityKilled)
         {
@@ -120,13 +119,20 @@ public static class PilotPlayerStatePatch
     static float EvalCost(float u, float omega, float errorRad, float k, int horizon, float dt, float penalty)
     {
         float w = omega, e = errorRad;
-        for (int f = 0; f < horizon; f++) { w += k * (u - w) * dt; e -= w * dt; }
+        float alpha = 1f - Mathf.Exp(-k * dt);
+        float ak = k > 0.0001f ? alpha / k : dt;
+        for (int f = 0; f < horizon; f++)
+        {
+            float w0 = w;
+            w += alpha * (u - w);
+            e -= u * dt + (w0 - u) * ak;
+        }
         float cost = e * e + w * w * dt * dt;
         if (Mathf.Abs(errorRad) > 0.005f && Mathf.Sign(e) != Mathf.Sign(errorRad)) cost += e * e * penalty;
         return cost;
     }
 
-    static float Mpc(float errorSin, float omega, float dt, ref float uPrev, float k, int horizon, int iters, float penalty)
+    static float Mpc(float errorSin, float omega, float dt, float k, int horizon, int iters, float penalty)
     {
         float errorRad = Mathf.Asin(Mathf.Clamp(errorSin, -0.999f, 0.999f));
         float lo = -1f, hi = 1f;
@@ -139,7 +145,6 @@ public static class PilotPlayerStatePatch
             if (fc < fd) { hi = d; d = c; fd = fc; c = hi - phi * (hi - lo); fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty); }
             else { lo = c; c = d; fc = fd; d = lo + phi * (hi - lo); fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty); }
         }
-        uPrev = (lo + hi) * 0.5f;
-        return uPrev;
+        return (lo + hi) * 0.5f;
     }
 }

@@ -31,8 +31,8 @@ public class Plugin : BaseUnityPlugin
 
     internal static ConfigEntry<float> ErrorExp;
 
-    internal static ConfigEntry<float> MpcK_P, MpcK_R, MpcK_Y;
-    internal static ConfigEntry<float> MpcPenalty_P, MpcPenalty_R, MpcPenalty_Y;
+    internal static ConfigEntry<float> MpcK;
+    internal static ConfigEntry<float> MpcPenalty;
     internal static ConfigEntry<int> MpcHorizon;
     internal static ConfigEntry<int> MpcIter;
 
@@ -64,31 +64,16 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Error power exponent. 1=linear, >1=suppress small errors",
                 new AcceptableValueRange<float>(0.5f, 2f)));
 
-        MpcK_P = Config.Bind("MPC Pitch", "K", 100f,
+        MpcK = Config.Bind("MPC", "K", 100f,
             new ConfigDescription("Angular rate response gain",
-                new AcceptableValueRange<float>(0.1f, 200f)));
-        MpcPenalty_P = Config.Bind("MPC Pitch", "Penalty", 3f,
+                new AcceptableValueRange<float>(0f, 500f)));
+        MpcPenalty = Config.Bind("MPC", "Penalty", 3f,
             new ConfigDescription("Overshoot penalty multiplier",
                 new AcceptableValueRange<float>(0f, 10f)));
-
-        MpcK_R = Config.Bind("MPC Roll", "K", 100f,
-            new ConfigDescription("Angular rate response gain",
-                new AcceptableValueRange<float>(0.1f, 200f)));
-        MpcPenalty_R = Config.Bind("MPC Roll", "Penalty", 3f,
-            new ConfigDescription("Overshoot penalty multiplier",
-                new AcceptableValueRange<float>(0f, 10f)));
-
-        MpcK_Y = Config.Bind("MPC Yaw", "K", 100f,
-            new ConfigDescription("Angular rate response gain",
-                new AcceptableValueRange<float>(0.1f, 200f)));
-        MpcPenalty_Y = Config.Bind("MPC Yaw", "Penalty", 3f,
-            new ConfigDescription("Overshoot penalty multiplier",
-                new AcceptableValueRange<float>(0f, 10f)));
-
         MpcHorizon = Config.Bind("MPC", "Horizon", 100,
             new ConfigDescription("Prediction horizon in frames",
                 new AcceptableValueRange<int>(1, 200)));
-        MpcIter = Config.Bind("MPC", "Iterations", 5,
+        MpcIter = Config.Bind("MPC", "Iterations", 10,
             new ConfigDescription("Golden-section search iterations",
                 new AcceptableValueRange<int>(3, 50)));
 
