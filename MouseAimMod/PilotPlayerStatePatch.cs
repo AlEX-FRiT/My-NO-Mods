@@ -145,21 +145,6 @@ public static class PilotPlayerStatePatch
             pidsInitialized = true;
         }
 
-        float kpMul = 1f;
-        if (Plugin.SchedEnabled.Value)
-        {
-            float speed = aircraft.rb.velocity.magnitude;
-            float altitude = aircraft.transform.position.y;
-            float rho = IsaDensity(altitude);
-            float q = 0.5f * rho * speed * speed;
-            float ratio = Plugin.SchedRefQ.Value / Mathf.Max(q, 1f);
-            kpMul = Mathf.Clamp(Mathf.Pow(ratio, Plugin.SchedExp.Value),
-                Plugin.SchedClampMin.Value, Plugin.SchedClampMax.Value);
-            pitchError *= kpMul;
-            rollError  *= kpMul;
-            yawError   *= kpMul;
-        }
-
         float pitchOutput = PitchPID.GetOutput(pitchError, pitchD, Plugin.PitchIThreshold.Value, Time.fixedDeltaTime);
         float rollOutput = RollPID.GetOutput(rollError, rollD, Plugin.RollIThreshold.Value, Time.fixedDeltaTime);
         float yawOutput = YawPID.GetOutput(yawError, yawD, Plugin.YawIThreshold.Value, Time.fixedDeltaTime);
@@ -205,28 +190,5 @@ public static class PilotPlayerStatePatch
         i -= cut * backCalcGain;
         pid.Field("i").SetValue(i);
         return clamped;
-    }
-
-    private static float IsaDensity(float altitudeM)
-    {
-        const float rho0 = 1.225f;
-        const float t0 = 288.15f;
-        const float lapse = 0.0065f;
-        const float g = 9.80665f;
-        const float r = 287.05f;
-        const float hTrop = 11000f;
-
-        float alt = Mathf.Max(altitudeM, 0f);
-        if (alt <= hTrop)
-        {
-            float t = t0 - lapse * alt;
-            return rho0 * Mathf.Pow(t / t0, (g / (r * lapse)) - 1f);
-        }
-        else
-        {
-            float tTrop = t0 - lapse * hTrop;
-            float rhoTrop = rho0 * Mathf.Pow(tTrop / t0, (g / (r * lapse)) - 1f);
-            return rhoTrop * Mathf.Exp(-g * (alt - hTrop) / (r * tTrop));
-        }
     }
 }

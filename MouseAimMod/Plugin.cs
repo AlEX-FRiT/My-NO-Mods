@@ -51,11 +51,6 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
     internal static ConfigEntry<bool> RollYawBalance;
-    internal static ConfigEntry<bool> SchedEnabled;
-    internal static ConfigEntry<float> SchedRefQ;
-    internal static ConfigEntry<float> SchedExp;
-    internal static ConfigEntry<float> SchedClampMin;
-    internal static ConfigEntry<float> SchedClampMax;
 
     internal static ConfigEntry<PresetSlot> ActivePreset;
     internal static ConfigEntry<bool> SavePreset;
@@ -123,21 +118,6 @@ public class Plugin : BaseUnityPlugin
         YawAttenEnd = Config.Bind("Roll/Yaw Balance", "AttenEnd", 60f,
             new ConfigDescription("Total view deviation (deg) where yaw reaches zero",
                 new AcceptableValueRange<float>(0f, 180f)));
-
-        SchedEnabled = Config.Bind("Gain Schedule", "Enabled", false,
-            new ConfigDescription("Scale PID gains by dynamic pressure. Disabled = flat gains for all altitudes"));
-        SchedRefQ = Config.Bind("Gain Schedule", "RefQ", 18750f,
-            new ConfigDescription("Reference dynamic pressure (Pa) where base gains were tuned. ~175 m/s at sea level",
-                new AcceptableValueRange<float>(1000f, 100000f)));
-        SchedExp = Config.Bind("Gain Schedule", "Exp", 0.3f,
-            new ConfigDescription("Power-law exponent. 0 = no scaling, 0.3 = mild, 1.0 = linear compensation",
-                new AcceptableValueRange<float>(0f, 2f)));
-        SchedClampMin = Config.Bind("Gain Schedule", "ClampMin", 0.1f,
-            new ConfigDescription("Minimum gain multiplier (safety floor)",
-                new AcceptableValueRange<float>(0.01f, 1f)));
-        SchedClampMax = Config.Bind("Gain Schedule", "ClampMax", 5f,
-            new ConfigDescription("Maximum gain multiplier (safety ceiling)",
-                new AcceptableValueRange<float>(1f, 20f)));
 
         MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
         InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
