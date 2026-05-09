@@ -72,7 +72,7 @@ public class Plugin : BaseUnityPlugin
         PitchP = Config.Bind("PID - Pitch", "P", 3.25f, "Pitch PID proportional gain (sin-unit input)");
         PitchI = Config.Bind("PID - Pitch", "I", 0.5f, "Pitch PID integral gain (sin-unit input)");
         PitchD = Config.Bind("PID - Pitch", "D", 1f, "Pitch PID derivative gain (sin-unit input)");
-        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 0.3f,
+        PitchIThreshold = Config.Bind("Pitch - Modify", "IThr", 1f,
             new ConfigDescription("Pitch error above which integral is zeroed. Default > max sin, effectively disabled",
                 new AcceptableValueRange<float>(0f, 1f)));
         PitchScale = Config.Bind("Pitch - Modify", "Scale", 1f,
@@ -85,7 +85,7 @@ public class Plugin : BaseUnityPlugin
         RollP = Config.Bind("Roll - PID", "P", 2f,  "Roll PID proportional gain (sin-unit input)");
         RollI = Config.Bind("Roll - PID", "I", 0f, "Roll PID integral gain (sin-unit input)");
         RollD = Config.Bind("Roll - PID", "D", 1f, "Roll PID derivative gain (sin-unit input)");
-        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 0.3f,
+        RollIThreshold = Config.Bind("Roll - Modify", "IThr", 1f,
             new ConfigDescription("Roll error above which integral is zeroed. Default > max sin, effectively disabled",
                 new AcceptableValueRange<float>(0f, 1f)));
         RollScale = Config.Bind("Roll - Modify", "Scale", 1f,
@@ -98,7 +98,7 @@ public class Plugin : BaseUnityPlugin
         YawP = Config.Bind("Yaw - PID", "P", 2f,  "Yaw PID proportional gain (sin-unit input)");
         YawI = Config.Bind("Yaw - PID", "I", 0.4f, "Yaw PID integral gain (sin-unit input)");
         YawD = Config.Bind("Yaw - PID", "D", 1f, "Yaw PID derivative gain (sin-unit input)");
-        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 0.3f,
+        YawIThreshold = Config.Bind("Yaw - Modify", "IThr", 1f,
             new ConfigDescription("Yaw error above which integral is zeroed. Default > max sin, effectively disabled",
                 new AcceptableValueRange<float>(0f, 1f)));
         YawScale = Config.Bind("Yaw - Modify", "Scale", 1f,
