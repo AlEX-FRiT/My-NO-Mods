@@ -6,189 +6,140 @@ namespace MouseAimMod;
 [HarmonyPatch(typeof(PilotPlayerState), "PlayerAxisControls")]
 public static class PilotPlayerStatePatch
 {
-    internal static PID PitchPID;
-    internal static PID RollPID;
-    internal static PID YawPID;
     private static bool pidsInitialized;
+    private static float _mpcPrevUP, _mpcPrevUR, _mpcPrevUY;
+    private static bool _stabilityKilled;
+    private static bool _stabilityOrig;
 
     [HarmonyPatch("PlayerControls")]
     [HarmonyPostfix]
     public static void PlayerControlsPostfix(PilotPlayerState __instance, Pilot ___pilot)
     {
-        if (!CameraAimState.MouseAimEnabled)
-            return;
-
-        if (PlayerSettings.virtualJoystickEnabled)
-            return;
-
-        if (!FlightHudStatePatch.CanvasEnabled)
-            return;
-
+        if (!CameraAimState.MouseAimEnabled) return;
+        if (PlayerSettings.virtualJoystickEnabled) return;
+        if (!FlightHudStatePatch.CanvasEnabled) return;
         var pilot = ___pilot;
-        if (pilot == null || pilot.aircraft == null)
-            return;
-
-        if (!pilot.aircraft.GetAircraftParameters().verticalLanding)
-            return;
-
+        if (pilot == null || pilot.aircraft == null) return;
+        if (!pilot.aircraft.GetAircraftParameters().verticalLanding) return;
         var aircraft = pilot.aircraft;
-
         float pitch = Mathf.Asin(-aircraft.transform.forward.y) * Mathf.Rad2Deg;
         float roll  = Mathf.Asin( aircraft.transform.right.y)  * Mathf.Rad2Deg;
-
         if (Mathf.Abs(pitch) > Plugin.HoverExitAngle.Value || Mathf.Abs(roll) > Plugin.HoverExitAngle.Value)
         {
-            if (HoverThrottleController.HoverActive)
-            {
-                HoverThrottleController.Disable(__instance);
-            }
+            if (HoverThrottleController.HoverActive) HoverThrottleController.Disable(__instance);
         }
         else if (GameManager.playerInput.GetButtonTimedPressUp("Brake", 0f, PlayerSettings.clickDelay))
         {
-            if (!HoverThrottleController.HoverActive)
-            {
-                HoverThrottleController.Enable(__instance);
-            }
-            else
-            {
-                HoverThrottleController.Disable(__instance);
-            }
+            if (!HoverThrottleController.HoverActive) HoverThrottleController.Enable(__instance);
+            else HoverThrottleController.Disable(__instance);
         }
     }
 
     [HarmonyPostfix]
-    public static void PlayerAxisControlsPostfix(
-        PilotPlayerState __instance,
-        Pilot ___pilot,
-        ControlInputs ___controlInputs)
+    public static void PlayerAxisControlsPostfix(PilotPlayerState __instance, Pilot ___pilot, ControlInputs ___controlInputs)
     {
-        if (!CameraAimState.MouseAimEnabled)
-            return;
-
-        if (PlayerSettings.virtualJoystickEnabled)
-            return;
-
-        if (!FlightHudStatePatch.CanvasEnabled)
-            return;
+        if (!CameraAimState.MouseAimEnabled) return;
+        if (PlayerSettings.virtualJoystickEnabled) return;
+        if (!FlightHudStatePatch.CanvasEnabled) return;
 
         bool freeLook = GameManager.playerInput.GetButton("Free Look");
+        bool keyboardPitch = Mathf.Abs(___controlInputs.pitch) > 0.01f;
 
         var pilot = ___pilot;
-        if (pilot == null || pilot.aircraft == null)
-            return;
-
+        if (pilot == null || pilot.aircraft == null) return;
         var aircraft = pilot.aircraft;
-        if (aircraft.rb == null)
-            return;
-
+        if (aircraft.rb == null) return;
         var controlInputs = ___controlInputs;
-        if (controlInputs == null)
-            return;
+        if (controlInputs == null) return;
 
         bool canHover = aircraft.GetAircraftParameters().verticalLanding;
-
         if (HoverThrottleController.HoverActive && canHover)
-        {
             HoverThrottleController.ApplyHoverThrottle(controlInputs, aircraft);
-        }
 
         bool aimActive = Plugin.InvertFreeLook.Value ? freeLook : !freeLook;
-        if (!aimActive)
-        {
-            pidsInitialized = false;
-            return;
-        }
-
-        if (Camera.main == null)
-            return;
+        if (!aimActive) { pidsInitialized = false; return; }
+        if (Camera.main == null) return;
 
         Vector3 viewDirection = Camera.main.transform.forward;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
-
-        // Error signals are sin(angular deviation) — already in [-1,1] range
-        float horizontalDeviation = localTarget.x;
-        float verticalDeviation   = localTarget.y;
-
+        float hd = localTarget.x, vd = localTarget.y;
         Vector3 av = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
-        float pitchD = -Mathf.Sin(av.x);
-        float rollD  =  Mathf.Sin(av.z);
-        float yawD   = -Mathf.Sin(av.y);
 
-        if (localTarget.z < 0f)
-        {
-            verticalDeviation = Mathf.Sign(verticalDeviation);
-        }
-
+        if (localTarget.z < 0f) vd = Mathf.Sign(vd);
         float exp = Plugin.ErrorExp.Value;
-        horizontalDeviation = Mathf.Sign(horizontalDeviation) * Mathf.Pow(Mathf.Abs(horizontalDeviation), exp);
-        verticalDeviation   = Mathf.Sign(verticalDeviation)   * Mathf.Pow(Mathf.Abs(verticalDeviation),   exp);
+        hd = Mathf.Sign(hd) * Mathf.Pow(Mathf.Abs(hd), exp);
+        vd = Mathf.Sign(vd) * Mathf.Pow(Mathf.Abs(vd), exp);
 
-        float pitchError = -verticalDeviation;
-        float yawError = horizontalDeviation;
-
+        float pitchError = -vd, yawError = hd;
         float rollAngle = aircraft.transform.eulerAngles.z;
         if (rollAngle > 180f) rollAngle -= 360f;
-
-        float rollError = horizontalDeviation;
+        float rollError = hd;
         if (Plugin.RollCentering.Value)
         {
-            float rollAngleSin = Mathf.Sin(rollAngle * Mathf.Deg2Rad);
-            float centeringFactor = 1f - Mathf.Clamp01(Mathf.Abs(horizontalDeviation) / Plugin.CenteringRange.Value);
-            rollError = horizontalDeviation + rollAngleSin * centeringFactor * Plugin.CenteringGain.Value;
+            float s = Mathf.Sin(rollAngle * Mathf.Deg2Rad);
+            float f = 1f - Mathf.Clamp01(Mathf.Abs(hd) / Plugin.CenteringRange.Value);
+            rollError = hd + s * f * Plugin.CenteringGain.Value;
         }
 
-        if (!pidsInitialized)
-        {
-            PitchPID.Reseti();
-            RollPID.Reseti();
-            YawPID.Reseti();
-            pidsInitialized = true;
-        }
+        if (!pidsInitialized) { _mpcPrevUP = _mpcPrevUR = _mpcPrevUY = 0f; pidsInitialized = true; }
 
-        float pitchOutput = PitchPID.GetOutput(pitchError, pitchD, Plugin.PitchIThreshold.Value, Time.fixedDeltaTime);
-        float rollOutput = RollPID.GetOutput(rollError, rollD, Plugin.RollIThreshold.Value, Time.fixedDeltaTime);
-        float yawOutput = YawPID.GetOutput(yawError, yawD, Plugin.YawIThreshold.Value, Time.fixedDeltaTime);
+        float dt = Time.fixedDeltaTime;
+        float pO = Mpc(pitchError, av.x, dt, ref _mpcPrevUP, Plugin.MpcK_P.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty_P.Value);
+        float rO = Mpc(rollError,  av.z, dt, ref _mpcPrevUR, Plugin.MpcK_R.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty_R.Value);
+        float yO = Mpc(yawError,  av.y, dt, ref _mpcPrevUY, Plugin.MpcK_Y.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty_Y.Value);
 
-        pitchOutput = ClampWithBackCalc(Traverse.Create((object)PitchPID), pitchOutput, Plugin.PitchTrackingTc.Value, Time.fixedDeltaTime);
-        rollOutput  = ClampWithBackCalc(Traverse.Create((object)RollPID),  rollOutput,  Plugin.RollTrackingTc.Value,  Time.fixedDeltaTime);
-        yawOutput   = ClampWithBackCalc(Traverse.Create((object)YawPID),   yawOutput,   Plugin.YawTrackingTc.Value,   Time.fixedDeltaTime);
-
-        float yawScale = 1f;
+        float ys = 1f;
         if (Plugin.RollYawBalance.Value)
         {
-            float totalDev = Vector3.Angle(aircraft.transform.forward, Camera.main.transform.forward);
-            yawScale = 1f - Mathf.Clamp01((totalDev - Plugin.YawAttenStart.Value) / (Plugin.YawAttenEnd.Value - Plugin.YawAttenStart.Value));
+            float d = Vector3.Angle(aircraft.transform.forward, Camera.main.transform.forward);
+            ys = 1f - Mathf.Clamp01((d - Plugin.YawAttenStart.Value) / (Plugin.YawAttenEnd.Value - Plugin.YawAttenStart.Value));
         }
-        yawOutput *= yawScale;
+        yO *= ys;
 
-        float pitchScaled = pitchOutput * Plugin.PitchScale.Value;
-        float rollScaled = rollOutput * Plugin.RollScale.Value;
-        float yawScaled = yawOutput * Plugin.YawScale.Value;
-        Plugin.PushDebugData(pitchError, rollError, yawError, pitchScaled, rollScaled, yawScaled);
+        Plugin.PushDebugData(pitchError, rollError, yawError, pO, rO, yO);
 
-        float pitchInput = pitchScaled;
-        float rollInput = rollScaled;
-        float yawInput = yawScaled;
+        if (controlInputs.pitch == 0f) controlInputs.pitch = pO;
+        if (controlInputs.roll  == 0f) controlInputs.roll  = rO;
+        if (controlInputs.yaw   == 0f) controlInputs.yaw   = yO;
 
-        if (controlInputs.pitch == 0f)
-            controlInputs.pitch = pitchInput;
-        if (controlInputs.roll == 0f)
-            controlInputs.roll = rollInput;
-        if (controlInputs.yaw == 0f)
-            controlInputs.yaw = yawInput;
+        if (keyboardPitch && Plugin.StabilityKbEnabled.Value && !_stabilityKilled)
+        {
+            _stabilityOrig = aircraft.flightAssist;
+            aircraft.flightAssist = false;
+            _stabilityKilled = true;
+        }
     }
 
-    private static float ClampWithBackCalc(Traverse pid, float rawOutput, float trackingTc, float dt)
+    [HarmonyPatch(typeof(Aircraft), "FilterInputs")]
+    [HarmonyPostfix]
+    private static void FilterInputsPostfix(Aircraft __instance)
     {
-        float clamped = Mathf.Clamp(rawOutput, -1f, 1f);
-        float cut = rawOutput - clamped;
-        if (Mathf.Approximately(cut, 0f))
-            return clamped;
+        if (_stabilityKilled) { __instance.flightAssist = _stabilityOrig; _stabilityKilled = false; }
+    }
 
-        float backCalcGain = Mathf.Min(1f, dt / trackingTc);
-        float i = pid.Field("i").GetValue<float>();
-        i -= cut * backCalcGain;
-        pid.Field("i").SetValue(i);
-        return clamped;
+    static float EvalCost(float u, float omega, float errorRad, float k, int horizon, float dt, float penalty)
+    {
+        float w = omega, e = errorRad;
+        for (int f = 0; f < horizon; f++) { w += k * (u - w) * dt; e -= w * dt; }
+        float cost = e * e + w * w * dt * dt;
+        if (Mathf.Abs(errorRad) > 0.005f && Mathf.Sign(e) != Mathf.Sign(errorRad)) cost += e * e * penalty;
+        return cost;
+    }
+
+    static float Mpc(float errorSin, float omega, float dt, ref float uPrev, float k, int horizon, int iters, float penalty)
+    {
+        float errorRad = Mathf.Asin(Mathf.Clamp(errorSin, -0.999f, 0.999f));
+        float lo = -1f, hi = 1f;
+        float phi = 0.618034f;
+        float c = hi - phi * (hi - lo), d = lo + phi * (hi - lo);
+        float fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty);
+        float fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty);
+        for (int i = 0; i < iters; i++)
+        {
+            if (fc < fd) { hi = d; d = c; fd = fc; c = hi - phi * (hi - lo); fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty); }
+            else { lo = c; c = d; fc = fd; d = lo + phi * (hi - lo); fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty); }
+        }
+        uPrev = (lo + hi) * 0.5f;
+        return uPrev;
     }
 }
