@@ -35,6 +35,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> MpcPenalty;
     internal static ConfigEntry<int> MpcHorizon;
     internal static ConfigEntry<int> MpcIter;
+    internal static ConfigEntry<float> MpcScale;
 
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
@@ -60,7 +61,7 @@ public class Plugin : BaseUnityPlugin
         MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
         InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
         StabilityKbEnabled = Config.Bind("General", "StabilityKbOff", false, "Disable flight assist stabilizer while keyboard pitch input is active");
-        ErrorExp = Config.Bind("General", "ErrorExp", 0.9f,
+        ErrorExp = Config.Bind("MPC", "ErrorExp", 0.9f,
             new ConfigDescription("Error power exponent. 1=linear, >1=suppress small errors",
                 new AcceptableValueRange<float>(0.5f, 2f)));
 
@@ -76,6 +77,9 @@ public class Plugin : BaseUnityPlugin
         MpcIter = Config.Bind("MPC", "Iterations", 10,
             new ConfigDescription("Golden-section search iterations",
                 new AcceptableValueRange<int>(3, 50)));
+        MpcScale = Config.Bind("MPC", "Scale", 1f,
+            new ConfigDescription("Output scale applied before clamp to FBW",
+                new AcceptableValueRange<float>(0f, 2f)));
 
         RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
         YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,

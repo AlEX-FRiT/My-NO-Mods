@@ -87,6 +87,11 @@ public static class PilotPlayerStatePatch
         float rollOut  = Mpc(rollError,  localAV.z, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
         float yawOut   = Mpc(yawError,   localAV.y, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
 
+        pitchOut = ApplyPaCompensation(pitchOut, aircraft);
+        pitchOut = Mathf.Clamp(pitchOut * Plugin.MpcScale.Value, -1f, 1f);
+        rollOut  = Mathf.Clamp(rollOut  * Plugin.MpcScale.Value, -1f, 1f);
+        yawOut   = Mathf.Clamp(yawOut   * Plugin.MpcScale.Value, -1f, 1f);
+
         float yawScale = 1f;
         if (Plugin.RollYawBalance.Value)
         {
@@ -146,5 +151,25 @@ public static class PilotPlayerStatePatch
             else { lo = c; c = d; fc = fd; d = lo + phi * (hi - lo); fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty); }
         }
         return (lo + hi) * 0.5f;
+    }
+
+    static float ApplyPaCompensation(float mpcOut, Aircraft aircraft)
+    {
+        var fbw = aircraft.GetControlsFilter();
+        if (fbw == null) return mpcOut;
+        var fw = Traverse.Create(fbw).Field("flyByWire");
+        float pa = fw.Field("pitchAdjuster").GetValue<float>();
+        float df = fw.Field("directControlFactor").GetValue<float>();
+        if (Mathf.Abs(pa) < 0.001f || df < 0.001f) return mpcOut;
+
+        var (_, p) = fbw.GetFlyByWireParameters();
+        float cornerSpeed = p[2];
+        float speed = aircraft.speed, rho = aircraft.airDensity;
+        float qRatio = Mathf.Clamp01(cornerSpeed * cornerSpeed * 1.225f / Mathf.Max(rho * speed * speed, 50f));
+        float maxPitchAV = p[1];
+        float denom = df * qRatio * maxPitchAV;
+        if (denom < 0.001f) return mpcOut;
+
+        return Mathf.Clamp(mpcOut - pa / denom, -1f, 1f);
     }
 }
