@@ -61,7 +61,8 @@ public class Plugin : BaseUnityPlugin
 
         foreach (var chart in GraphRegistry.Charts)
         {
-            chart.Position = GUI.Window(chart.Id, chart.Position, chart.DrawWindow, chart.Name, _windowStyle);
+            string title = $"{chart.Name} [{chart.YMin},{chart.YMax}]";
+            chart.Position = GUI.Window(chart.Id, chart.Position, chart.DrawWindow, title, _windowStyle);
         }
     }
 
