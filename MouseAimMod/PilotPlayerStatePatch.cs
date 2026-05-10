@@ -10,6 +10,7 @@ public static class PilotPlayerStatePatch
     private static bool _stabilityKilled;
     private static bool _stabilityOrig;
     private static float _fbwInputPitch;
+    private static int _reverseTimer;
 
     [HarmonyPatch("PlayerControls")]
     [HarmonyPostfix]
@@ -88,7 +89,7 @@ public static class PilotPlayerStatePatch
         float rollOut  = Mpc(rollError,  localAV.z, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
         float yawOut   = Mpc(yawError,   localAV.y, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
 
-        pitchOut = ApplyPaCompensation(pitchOut, aircraft);
+        pitchOut = ApplyPaCompensation(pitchOut, aircraft, localAV.x);
         pitchOut = Mathf.Clamp(pitchOut * Plugin.MpcScale.Value, -1f, 1f);
         _fbwInputPitch = pitchOut;
         rollOut  = Mathf.Clamp(rollOut  * Plugin.MpcScale.Value, -1f, 1f);
@@ -162,23 +163,35 @@ public static class PilotPlayerStatePatch
         return (lo + hi) * 0.5f;
     }
 
-    static float ApplyPaCompensation(float mpcOut, Aircraft aircraft)
+    static float ApplyPaCompensation(float mpcOut, Aircraft aircraft, float localAV)
     {
         var fbw = aircraft.GetControlsFilter();
         if (fbw == null) return mpcOut;
         var fw = Traverse.Create(fbw).Field("flyByWire");
         float pa = fw.Field("pitchAdjuster").GetValue<float>();
         float df = fw.Field("directControlFactor").GetValue<float>();
-        if (Mathf.Abs(pa) < 0.001f || df < 0.001f) return mpcOut;
 
         var (_, p) = fbw.GetFlyByWireParameters();
         float cornerSpeed = p[2];
         float speed = aircraft.speed, rho = aircraft.airDensity;
         float qRatio = Mathf.Clamp01(cornerSpeed * cornerSpeed * 1.225f / Mathf.Max(rho * speed * speed, 50f));
         float maxPitchAV = p[1];
+
+        float predictedFbwOut = -(localAV - mpcOut * maxPitchAV) * df * qRatio + pa;
+        if (Mathf.Abs(predictedFbwOut) >= 0.99f)
+        {
+            _reverseTimer = Plugin.SaturationHold.Value;
+            return 0f;
+        }
+        if (_reverseTimer > 0)
+        {
+            _reverseTimer--;
+            return 0f;
+        }
+
+        if (Mathf.Abs(pa) < 0.001f || df < 0.001f) return mpcOut;
         float denom = df * qRatio * maxPitchAV;
         if (denom < 0.001f) return mpcOut;
-
         return Mathf.Clamp(mpcOut - pa / denom, -1f, 1f);
     }
 }

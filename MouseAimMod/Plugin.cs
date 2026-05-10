@@ -36,6 +36,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<int> MpcHorizon;
     internal static ConfigEntry<int> MpcIter;
     internal static ConfigEntry<float> MpcScale;
+    internal static ConfigEntry<int> SaturationHold;
 
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
@@ -49,7 +50,8 @@ public class Plugin : BaseUnityPlugin
     private static object _pitchErrStream, _pitchOutStream;
     private static object _rollErrStream, _rollOutStream;
     private static object _yawErrStream, _yawOutStream;
-    private static object _fbwInStream, _fbwOutStream, _fbwPaStream;
+    private static object _fbwInStream, _fbwOutStream;
+    private static object _paStream;
     private static MethodInfo _debugPushMethod;
 
     private Harmony _harmony;
@@ -61,19 +63,19 @@ public class Plugin : BaseUnityPlugin
 
         MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
         InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
-        StabilityKbEnabled = Config.Bind("General", "StabilityKbOff", false, "Disable flight assist stabilizer while keyboard pitch input is active");
+        StabilityKbEnabled = Config.Bind("General", "StabilityKill", false, "Temporarily disable flight assist while keyboard pitch is active");
         ErrorExp = Config.Bind("MPC", "ErrorExp", 0.9f,
             new ConfigDescription("Error power exponent. 1=linear, >1=suppress small errors",
                 new AcceptableValueRange<float>(0.5f, 2f)));
 
         MpcK = Config.Bind("MPC", "K", 50f,
-            new ConfigDescription("Angular rate response gain",
+            new ConfigDescription("K=100→87%/frame, K=50→63%/frame, K=10→18%/frame, K=1→2%/frame toward target angular rate",
                 new AcceptableValueRange<float>(0f, 100f)));
         MpcPenalty = Config.Bind("MPC", "Penalty", 3f,
             new ConfigDescription("Overshoot penalty multiplier",
                 new AcceptableValueRange<float>(0f, 10f)));
         MpcHorizon = Config.Bind("MPC", "Horizon", 50,
-            new ConfigDescription("Prediction horizon in frames",
+            new ConfigDescription("Look-ahead frames. K × Horizon × 0.02 should be ≥ 3 to avoid myopic oscillation",
                 new AcceptableValueRange<int>(0, 100)));
         MpcIter = Config.Bind("MPC", "Iterations", 10,
             new ConfigDescription("Golden-section search iterations",
@@ -81,6 +83,9 @@ public class Plugin : BaseUnityPlugin
         MpcScale = Config.Bind("MPC", "Scale", 1f,
             new ConfigDescription("Output scale applied before clamp to FBW",
                 new AcceptableValueRange<float>(0f, 2f)));
+        SaturationHold = Config.Bind("MPC", "SaturationHold", 25,
+            new ConfigDescription("Pause MPC output when FBW is saturated, for this many frames",
+                new AcceptableValueRange<int>(0, 200)));
 
         RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
         YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,
@@ -148,7 +153,9 @@ public class Plugin : BaseUnityPlugin
             var addF = fbwChart.GetType().GetMethod("AddStream");
             _fbwInStream  = addF.Invoke(fbwChart, new object[] { "In", Color.green });
             _fbwOutStream = addF.Invoke(fbwChart, new object[] { "Out", Color.yellow });
-            _fbwPaStream  = addF.Invoke(fbwChart, new object[] { "PA", new Color(1f, 0.4f, 0.4f) });
+
+            var paChart = createChart.Invoke(null, new[] { flowVal, "PA", 480f, 200f, -2f, 2f, 600, null, null });
+            _paStream = paChart.GetType().GetMethod("AddStream").Invoke(paChart, new object[] { "PA", new Color(1f, 0.4f, 0.4f) });
             _debugAvailable = true;
             Logger.LogInfo("DebugGraphMod charts registered");
         }
@@ -179,7 +186,7 @@ public class Plugin : BaseUnityPlugin
             if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
             _debugPushMethod.Invoke(_fbwInStream, new object[] { inP });
             _debugPushMethod.Invoke(_fbwOutStream, new object[] { outP });
-            _debugPushMethod.Invoke(_fbwPaStream, new object[] { pa });
+            _debugPushMethod.Invoke(_paStream, new object[] { pa });
         }
         catch { }
     }
