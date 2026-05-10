@@ -9,6 +9,7 @@ public static class PilotPlayerStatePatch
     private static bool _mpcInitialized;
     private static bool _stabilityKilled;
     private static bool _stabilityOrig;
+    private static float _fbwInputPitch;
 
     [HarmonyPatch("PlayerControls")]
     [HarmonyPostfix]
@@ -89,6 +90,7 @@ public static class PilotPlayerStatePatch
 
         pitchOut = ApplyPaCompensation(pitchOut, aircraft);
         pitchOut = Mathf.Clamp(pitchOut * Plugin.MpcScale.Value, -1f, 1f);
+        _fbwInputPitch = pitchOut;
         rollOut  = Mathf.Clamp(rollOut  * Plugin.MpcScale.Value, -1f, 1f);
         yawOut   = Mathf.Clamp(yawOut   * Plugin.MpcScale.Value, -1f, 1f);
 
@@ -119,6 +121,13 @@ public static class PilotPlayerStatePatch
     private static void FilterInputsPostfix(Aircraft __instance)
     {
         if (_stabilityKilled) { __instance.flightAssist = _stabilityOrig; _stabilityKilled = false; }
+        var fbw = __instance.GetControlsFilter();
+        if (fbw != null)
+        {
+            float pa = Traverse.Create(fbw).Field("flyByWire").Field("pitchAdjuster").GetValue<float>();
+            float fbwOut = __instance.GetInputs().pitch;
+            Plugin.PushDebugFbw(_fbwInputPitch, fbwOut, pa);
+        }
     }
 
     static float EvalCost(float u, float omega, float errorRad, float k, int horizon, float dt, float penalty)

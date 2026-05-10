@@ -49,6 +49,7 @@ public class Plugin : BaseUnityPlugin
     private static object _pitchErrStream, _pitchOutStream;
     private static object _rollErrStream, _rollOutStream;
     private static object _yawErrStream, _yawOutStream;
+    private static object _fbwInStream, _fbwOutStream, _fbwPaStream;
     private static MethodInfo _debugPushMethod;
 
     private Harmony _harmony;
@@ -65,15 +66,15 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Error power exponent. 1=linear, >1=suppress small errors",
                 new AcceptableValueRange<float>(0.5f, 2f)));
 
-        MpcK = Config.Bind("MPC", "K", 100f,
+        MpcK = Config.Bind("MPC", "K", 50f,
             new ConfigDescription("Angular rate response gain",
-                new AcceptableValueRange<float>(0f, 500f)));
+                new AcceptableValueRange<float>(0f, 100f)));
         MpcPenalty = Config.Bind("MPC", "Penalty", 3f,
             new ConfigDescription("Overshoot penalty multiplier",
                 new AcceptableValueRange<float>(0f, 10f)));
-        MpcHorizon = Config.Bind("MPC", "Horizon", 100,
+        MpcHorizon = Config.Bind("MPC", "Horizon", 50,
             new ConfigDescription("Prediction horizon in frames",
-                new AcceptableValueRange<int>(1, 200)));
+                new AcceptableValueRange<int>(0, 100)));
         MpcIter = Config.Bind("MPC", "Iterations", 10,
             new ConfigDescription("Golden-section search iterations",
                 new AcceptableValueRange<int>(3, 50)));
@@ -142,6 +143,12 @@ public class Plugin : BaseUnityPlugin
             _rollOutStream = addStream.Invoke(outChart, new object[] { "Out", Color.yellow });
             _yawErrStream = addStream.Invoke(yawChart, new object[] { "Err", Color.green });
             _yawOutStream = addStream.Invoke(yawChart, new object[] { "Out", Color.yellow });
+
+            var fbwChart = createChart.Invoke(null, new[] { flowVal, "FBW Pitch", 480f, 200f, -1f, 1f, 600, null, null });
+            var addF = fbwChart.GetType().GetMethod("AddStream");
+            _fbwInStream  = addF.Invoke(fbwChart, new object[] { "In", Color.green });
+            _fbwOutStream = addF.Invoke(fbwChart, new object[] { "Out", Color.yellow });
+            _fbwPaStream  = addF.Invoke(fbwChart, new object[] { "PA", new Color(1f, 0.4f, 0.4f) });
             _debugAvailable = true;
             Logger.LogInfo("DebugGraphMod charts registered");
         }
@@ -162,6 +169,19 @@ public class Plugin : BaseUnityPlugin
             _debugPushMethod.Invoke(_yawOutStream, new object[] { yO });
         }
         catch { _debugAvailable = false; }
+    }
+
+    internal static void PushDebugFbw(float inP, float outP, float pa)
+    {
+        if (!_debugAvailable) return;
+        try
+        {
+            if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
+            _debugPushMethod.Invoke(_fbwInStream, new object[] { inP });
+            _debugPushMethod.Invoke(_fbwOutStream, new object[] { outP });
+            _debugPushMethod.Invoke(_fbwPaStream, new object[] { pa });
+        }
+        catch { }
     }
 
     private static void SaveToPreset(PresetSlot slot)
