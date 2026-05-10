@@ -52,7 +52,9 @@ public class Plugin : BaseUnityPlugin
     private static object _rollErrStream, _rollOutStream;
     private static object _yawErrStream, _yawOutStream;
     private static object _fbwInStream, _fbwOutStream;
+    private static object _coordPrStream, _coordYwStream;
     private static MethodInfo _debugPushMethod;
+    private static MethodInfo _debugPushXyMethod;
 
     private Harmony _harmony;
 
@@ -156,6 +158,12 @@ public class Plugin : BaseUnityPlugin
             var addF = fbwChart.GetType().GetMethod("AddStream");
             _fbwInStream  = addF.Invoke(fbwChart, new object[] { "In", Color.green });
             _fbwOutStream = addF.Invoke(fbwChart, new object[] { "Out", Color.yellow });
+
+            var coordVal = Enum.Parse(chartTypeEnum, "Coordinate");
+            var xyChart = createChart.Invoke(null, new object[] { coordVal, "Stick XY", 480f, 200f, -1f, 1f, 5, -1f, 1f });
+            var addC = xyChart.GetType().GetMethod("AddStream");
+            _coordPrStream = addC.Invoke(xyChart, new object[] { "P/R", Color.cyan });
+            _coordYwStream = addC.Invoke(xyChart, new object[] { "Yaw", Color.yellow });
             _debugAvailable = true;
             Logger.LogInfo("DebugGraphMod charts registered");
         }
@@ -186,6 +194,19 @@ public class Plugin : BaseUnityPlugin
             if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
             _debugPushMethod.Invoke(_fbwInStream, new object[] { inP });
             _debugPushMethod.Invoke(_fbwOutStream, new object[] { outP });
+        }
+        catch { _debugAvailable = false; }
+    }
+
+    internal static void PushDebugCoord(float prX, float prY, float ywX, float ywY)
+    {
+        if (!_debugAvailable) return;
+        try
+        {
+            if (_debugPushXyMethod == null)
+                _debugPushXyMethod = _coordPrStream.GetType().GetMethod("PushXy");
+            _debugPushXyMethod.Invoke(_coordPrStream, new object[] { prX, prY });
+            _debugPushXyMethod.Invoke(_coordYwStream, new object[] { ywX, ywY });
         }
         catch { _debugAvailable = false; }
     }

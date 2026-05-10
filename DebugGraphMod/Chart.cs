@@ -74,13 +74,36 @@ public class Chart
                 }
             }
 
-            float zeroY = chartRect.height * Mathf.InverseLerp(YMin, YMax, 0f);
-            GraphRegistry.LineMat.color = new Color(1f, 1f, 1f, 0.2f);
-            GraphRegistry.LineMat.SetPass(0);
-            GL.Begin(GL.LINES);
-            GL.Vertex3(0, zeroY, 0);
-            GL.Vertex3(chartRect.width, zeroY, 0);
-            GL.End();
+            int yStart = Mathf.CeilToInt(YMin);
+            int yEnd = Mathf.FloorToInt(YMax);
+            for (int y = yStart; y <= yEnd; y++)
+            {
+                float yPos = chartRect.height * Mathf.InverseLerp(YMin, YMax, y);
+                float alpha = y == 0 ? 0.25f : 0.1f;
+                GraphRegistry.LineMat.color = new Color(1f, 1f, 1f, alpha);
+                GraphRegistry.LineMat.SetPass(0);
+                GL.Begin(GL.LINES);
+                GL.Vertex3(0, yPos, 0);
+                GL.Vertex3(chartRect.width, yPos, 0);
+                GL.End();
+            }
+
+            if (Type == ChartType.Coordinate)
+            {
+                int xStart = Mathf.CeilToInt(XMin);
+                int xEnd = Mathf.FloorToInt(XMax);
+                for (int x = xStart; x <= xEnd; x++)
+                {
+                    float xPos = chartRect.width * Mathf.InverseLerp(XMin, XMax, x);
+                    float alpha = x == 0 ? 0.25f : 0.1f;
+                    GraphRegistry.LineMat.color = new Color(1f, 1f, 1f, alpha);
+                    GraphRegistry.LineMat.SetPass(0);
+                    GL.Begin(GL.LINES);
+                    GL.Vertex3(xPos, 0, 0);
+                    GL.Vertex3(xPos, chartRect.height, 0);
+                    GL.End();
+                }
+            }
 
             GL.PopMatrix();
             GL.Viewport(new Rect(0, 0, Screen.width, Screen.height));

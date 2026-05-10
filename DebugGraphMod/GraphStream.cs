@@ -61,15 +61,22 @@ public class GraphStream
         float oneOverN = 1f / (capacity - 1f);
 
         GL.Begin(GL.LINE_STRIP);
-
+        float lastX = 0f, lastY = 0f;
         for (int i = 0; i < n; i++)
         {
             int idx = count >= capacity ? (writeIndex + i) % capacity : i;
             float val = yBuffer[idx];
             float normalized = Mathf.InverseLerp(yMin, yMax, val);
-            GL.Vertex3(w * (xOff + i) * oneOverN, h * normalized, 0);
+            lastX = w * (xOff + i) * oneOverN;
+            lastY = h * normalized;
+            GL.Vertex3(lastX, lastY, 0);
         }
+        GL.End();
 
+        float s = 6f;
+        GL.Begin(GL.LINES);
+        GL.Vertex3(lastX - s, lastY, 0); GL.Vertex3(lastX + s, lastY, 0);
+        GL.Vertex3(lastX, lastY - s, 0); GL.Vertex3(lastX, lastY + s, 0);
         GL.End();
     }
 
@@ -83,15 +90,22 @@ public class GraphStream
         if (xRange <= 0f || yRange <= 0f) return;
 
         GL.Begin(GL.LINE_STRIP);
-
+        float cx = 0, cy = 0;
         for (int i = 0; i < count; i++)
         {
             int idx = count < capacity ? i : (writeIndex + i) % capacity;
             float dx = xBuffer[idx];
             float dy = yBuffer[idx];
-            GL.Vertex3(w * (dx - xMin) / xRange, h * (dy - yMin) / yRange, 0);
+            cx = w * (dx - xMin) / xRange;
+            cy = h * (dy - yMin) / yRange;
+            GL.Vertex3(cx, cy, 0);
         }
+        GL.End();
 
+        float s = 6f;
+        GL.Begin(GL.LINES);
+        GL.Vertex3(cx - s, cy, 0); GL.Vertex3(cx + s, cy, 0);
+        GL.Vertex3(cx, cy - s, 0); GL.Vertex3(cx, cy + s, 0);
         GL.End();
     }
 }

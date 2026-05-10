@@ -105,6 +105,7 @@ public static class PilotPlayerStatePatch
         yawOut *= yawScale;
 
         Plugin.PushDebugData(pitchError, rollError, yawError, pitchOut, rollOut, yawOut);
+        Plugin.PushDebugCoord(yawOut, pitchOut, rollOut, -1f);
 
         if (controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
