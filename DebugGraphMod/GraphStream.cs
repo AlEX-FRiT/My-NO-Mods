@@ -14,6 +14,19 @@ public class GraphStream
     private readonly bool hasX;
     private int count;
 
+    internal float[] GetYData()
+    {
+        int n = count >= capacity ? capacity : count;
+        if (n == 0) return new float[0];
+        float[] result = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            int idx = count >= capacity ? (writeIndex + i) % capacity : i;
+            result[i] = yBuffer[idx];
+        }
+        return result;
+    }
+
     public GraphStream(string name, Color color, int capacity, bool hasX)
     {
         Name = name;

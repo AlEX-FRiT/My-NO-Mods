@@ -17,6 +17,7 @@ public class Chart
 
     private readonly int id;
     private readonly List<GraphStream> streams = new();
+    internal List<GraphStream> Streams => streams;
 
     public Chart(int id)
     {

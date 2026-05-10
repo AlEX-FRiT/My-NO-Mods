@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using BepInEx;
 using BepInEx.Configuration;
 using UnityEngine;
@@ -10,6 +12,7 @@ namespace DebugGraphMod;
 public class Plugin : BaseUnityPlugin
 {
     public static ConfigEntry<bool> Enabled;
+    public static ConfigEntry<bool> SaveData;
 
     private GUIStyle _windowStyle;
     private Texture2D _bgTex;
@@ -18,6 +21,8 @@ public class Plugin : BaseUnityPlugin
     private void Awake()
     {
         Enabled = Config.Bind("General", "Enabled", true, "Show debug graphs");
+        SaveData = Config.Bind("General", "SaveData", false, "Toggle ON to save all chart data to file");
+        SaveData.SettingChanged += (_, _) => { if (SaveData.Value) { DoSaveData(); SaveData.Value = false; } };
     }
 
     private void EnsureStyle()
@@ -72,5 +77,52 @@ public class Plugin : BaseUnityPlugin
             Destroy(GraphRegistry.LineMat);
         if (_bgTex != null)
             Destroy(_bgTex);
+    }
+
+    private void DoSaveData()
+    {
+        try
+        {
+            string dir = Path.Combine(Paths.ConfigPath, "nuclearoption.debuggraphmod_data");
+            Directory.CreateDirectory(dir);
+            DateTime now = DateTime.Now;
+
+            foreach (var chart in GraphRegistry.Charts)
+            {
+                string baseName = $"{chart.Name}_{now:HHmmss}";
+                string path = Path.Combine(dir, $"{baseName}.csv");
+                if (File.Exists(path))
+                {
+                    var rng = new System.Random();
+                    path = Path.Combine(dir, $"{baseName}_{rng.Next(1000, 9999)}.csv");
+                }
+
+                using var sw = new StreamWriter(path);
+                var streams = chart.Streams;
+                if (streams.Count == 0) continue;
+
+                sw.Write("Index");
+                foreach (var s in streams) sw.Write($",{s.Name}");
+                sw.WriteLine();
+
+                int maxLen = 0;
+                var data = new float[streams.Count][];
+                for (int i = 0; i < streams.Count; i++)
+                {
+                    data[i] = streams[i].GetYData();
+                    if (data[i].Length > maxLen) maxLen = data[i].Length;
+                }
+
+                for (int i = 0; i < maxLen; i++)
+                {
+                    sw.Write(i.ToString());
+                    for (int j = 0; j < streams.Count; j++)
+                        sw.Write(i < data[j].Length ? $",{data[j][i]}" : ",");
+                    sw.WriteLine();
+                }
+            }
+            Logger.LogInfo("Chart data saved");
+        }
+        catch (Exception ex) { Logger.LogError($"SaveData failed: {ex.Message}"); }
     }
 }
