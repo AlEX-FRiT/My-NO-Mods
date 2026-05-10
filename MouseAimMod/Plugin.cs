@@ -37,6 +37,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<int> MpcIter;
     internal static ConfigEntry<float> MpcScale;
     internal static ConfigEntry<int> SaturationHold;
+    internal static ConfigEntry<float> SaturationSens;
 
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
@@ -51,7 +52,6 @@ public class Plugin : BaseUnityPlugin
     private static object _rollErrStream, _rollOutStream;
     private static object _yawErrStream, _yawOutStream;
     private static object _fbwInStream, _fbwOutStream;
-    private static object _paStream;
     private static MethodInfo _debugPushMethod;
 
     private Harmony _harmony;
@@ -83,9 +83,12 @@ public class Plugin : BaseUnityPlugin
         MpcScale = Config.Bind("MPC", "Scale", 1f,
             new ConfigDescription("Output scale applied before clamp to FBW",
                 new AcceptableValueRange<float>(0f, 2f)));
-        SaturationHold = Config.Bind("MPC", "SaturationHold", 25,
+        SaturationHold = Config.Bind("MPC", "SaturationHold", 50,
             new ConfigDescription("Pause MPC output when FBW is saturated, for this many frames",
                 new AcceptableValueRange<int>(0, 200)));
+        SaturationSens = Config.Bind("MPC", "SaturationSens", 1.75f,
+            new ConfigDescription("Saturation detection sensitivity. Higher = triggers earlier",
+                new AcceptableValueRange<float>(0f, 5f)));
 
         RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
         YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,
@@ -96,7 +99,7 @@ public class Plugin : BaseUnityPlugin
                 new AcceptableValueRange<float>(0f, 180f)));
 
         RollCentering = Config.Bind("Roll Centering", "RollCentering", false, "Auto roll back to level when camera is near center");
-        CenteringRange = Config.Bind("Roll Centering", "CenteringRange", 0.259f,
+        CenteringRange = Config.Bind("Roll Centering", "CenteringRange", 0.25f,
             new ConfigDescription("Horizontal deviation range for roll centering (sin units, ~15°)",
                 new AcceptableValueRange<float>(0.01f, 0.35f)));
         CenteringGain = Config.Bind("Roll Centering", "CenteringGain", 0.3f,
@@ -153,9 +156,6 @@ public class Plugin : BaseUnityPlugin
             var addF = fbwChart.GetType().GetMethod("AddStream");
             _fbwInStream  = addF.Invoke(fbwChart, new object[] { "In", Color.green });
             _fbwOutStream = addF.Invoke(fbwChart, new object[] { "Out", Color.yellow });
-
-            var paChart = createChart.Invoke(null, new[] { flowVal, "PA", 480f, 200f, -2f, 2f, 600, null, null });
-            _paStream = paChart.GetType().GetMethod("AddStream").Invoke(paChart, new object[] { "PA", new Color(1f, 0.4f, 0.4f) });
             _debugAvailable = true;
             Logger.LogInfo("DebugGraphMod charts registered");
         }
@@ -178,7 +178,7 @@ public class Plugin : BaseUnityPlugin
         catch { _debugAvailable = false; }
     }
 
-    internal static void PushDebugFbw(float inP, float outP, float pa)
+    internal static void PushDebugFbw(float inP, float outP)
     {
         if (!_debugAvailable) return;
         try
@@ -186,9 +186,8 @@ public class Plugin : BaseUnityPlugin
             if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
             _debugPushMethod.Invoke(_fbwInStream, new object[] { inP });
             _debugPushMethod.Invoke(_fbwOutStream, new object[] { outP });
-            _debugPushMethod.Invoke(_paStream, new object[] { pa });
         }
-        catch { }
+        catch { _debugAvailable = false; }
     }
 
     private static void SaveToPreset(PresetSlot slot)
