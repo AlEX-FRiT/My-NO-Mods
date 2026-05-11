@@ -14,6 +14,12 @@ public class GraphStream
     private readonly bool hasX;
     private int count;
 
+    internal void Clear()
+    {
+        writeIndex = 0;
+        count = 0;
+    }
+
     internal float[] GetYData()
     {
         int n = count >= capacity ? capacity : count;

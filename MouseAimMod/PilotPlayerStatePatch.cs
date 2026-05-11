@@ -85,9 +85,36 @@ public static class PilotPlayerStatePatch
         if (!_mpcInitialized) { _mpcInitialized = true; }
 
         float dt = Time.fixedDeltaTime;
-        float pitchOut = Mpc(pitchError, localAV.x, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
-        float rollOut  = Mpc(rollError,  localAV.z, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
-        float yawOut   = Mpc(yawError,   localAV.y, dt, Plugin.MpcK.Value, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
+        float kPitch = Plugin.MpcK.Value, kRoll = Plugin.MpcK.Value, kYaw = Plugin.MpcK.Value;
+
+        var fbw = aircraft.GetControlsFilter();
+        if (fbw != null)
+        {
+            var (_, p) = fbw.GetFlyByWireParameters();
+            float cornerSpeed = p[2];
+            float yawTightness = p[13];
+            float rho = aircraft.airDensity;
+            float speed = Mathf.Max(aircraft.speed, 7.07f);
+            float qRatio = Mathf.Clamp01(cornerSpeed * cornerSpeed * 1.225f / (rho * speed * speed));
+            float kBase = Plugin.MpcK.Value;
+            kPitch = kBase * qRatio;
+            kRoll  = kBase * qRatio;
+            kYaw   = kBase * qRatio * yawTightness;
+
+            if (fbw.GetType().Name == "HeloControlsFilter")
+            {
+                var hfbw = Traverse.Create(fbw).Field("heloFlyByWire");
+                float wvs = hfbw.Field("yawWeathervaneStrength").GetValue<float>();
+                float wvMin = hfbw.Field("yawWeathervaneMinSpeed").GetValue<float>();
+                float wvMax = hfbw.Field("yawWeathervaneMaxSpeed").GetValue<float>();
+                float t = Mathf.Clamp01((speed - wvMin) / (wvMax - wvMin));
+                kYaw += kBase * wvs * t * 0.5f;
+            }
+        }
+
+        float pitchOut = Mpc(pitchError, localAV.x, dt, kPitch, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
+        float rollOut  = Mpc(rollError,  localAV.z, dt, kRoll,  Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
+        float yawOut   = Mpc(yawError,   localAV.y, dt, kYaw,   Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
 
         pitchOut = Mathf.Clamp(pitchOut * Plugin.MpcScale.Value, -1f, 1f);
         rollOut  = Mathf.Clamp(rollOut  * Plugin.MpcScale.Value, -1f, 1f);
@@ -106,6 +133,7 @@ public static class PilotPlayerStatePatch
 
         Plugin.PushDebugData(pitchError, rollError, yawError, pitchOut, rollOut, yawOut);
         Plugin.PushDebugCoord(yawOut, pitchOut, rollOut, -1f);
+        Plugin.PushDebugDynK(kPitch / Plugin.MpcK.Value, kRoll / Plugin.MpcK.Value, kYaw / Plugin.MpcK.Value);
 
         if (controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
@@ -138,13 +166,14 @@ public static class PilotPlayerStatePatch
         float w = omega, e = errorRad;
         float alpha = 1f - Mathf.Exp(-k * dt);
         float ak = k > 0.0001f ? alpha / k : dt;
+        float cost = 0f;
         for (int f = 0; f < horizon; f++)
         {
             float w0 = w;
             w += alpha * (u - w);
             e -= u * dt + (w0 - u) * ak;
+            cost += e * e + w * w * dt * dt;
         }
-        float cost = e * e + w * w * dt * dt;
         if (Mathf.Abs(errorRad) > 0.005f && Mathf.Sign(e) != Mathf.Sign(errorRad)) cost += e * e * penalty;
         return cost;
     }

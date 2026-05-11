@@ -53,6 +53,7 @@ public class Plugin : BaseUnityPlugin
     private static object _yawErrStream, _yawOutStream;
     private static object _fbwInStream, _fbwOutStream;
     private static object _coordPrStream, _coordYwStream;
+    private static object _dynKpStream, _dynKrStream, _dynKyStream;
     private static MethodInfo _debugPushMethod;
     private static MethodInfo _debugPushXyMethod;
 
@@ -164,6 +165,12 @@ public class Plugin : BaseUnityPlugin
             var addC = xyChart.GetType().GetMethod("AddStream");
             _coordPrStream = addC.Invoke(xyChart, new object[] { "P/R", Color.cyan });
             _coordYwStream = addC.Invoke(xyChart, new object[] { "Yaw", Color.yellow });
+
+            var dkChart = createChart.Invoke(null, new[] { flowVal, "Dyn K %", 480f, 150f, 0f, 5f, 600, null, null });
+            var addD = dkChart.GetType().GetMethod("AddStream");
+            _dynKpStream = addD.Invoke(dkChart, new object[] { "Pitch", Color.green });
+            _dynKrStream = addD.Invoke(dkChart, new object[] { "Roll", Color.cyan });
+            _dynKyStream = addD.Invoke(dkChart, new object[] { "Yaw", Color.yellow });
             _debugAvailable = true;
             Logger.LogInfo("DebugGraphMod charts registered");
         }
@@ -207,6 +214,19 @@ public class Plugin : BaseUnityPlugin
                 _debugPushXyMethod = _coordPrStream.GetType().GetMethod("PushXy");
             _debugPushXyMethod.Invoke(_coordPrStream, new object[] { prX, prY });
             _debugPushXyMethod.Invoke(_coordYwStream, new object[] { ywX, ywY });
+        }
+        catch { _debugAvailable = false; }
+    }
+
+    internal static void PushDebugDynK(float kp, float kr, float ky)
+    {
+        if (!_debugAvailable) return;
+        try
+        {
+            if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
+            _debugPushMethod.Invoke(_dynKpStream, new object[] { kp });
+            _debugPushMethod.Invoke(_dynKrStream, new object[] { kr });
+            _debugPushMethod.Invoke(_dynKyStream, new object[] { ky });
         }
         catch { _debugAvailable = false; }
     }

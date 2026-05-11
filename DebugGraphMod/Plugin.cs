@@ -13,6 +13,7 @@ public class Plugin : BaseUnityPlugin
 {
     public static ConfigEntry<bool> Enabled;
     public static ConfigEntry<bool> SaveData;
+    public static ConfigEntry<bool> DeleteData;
 
     private GUIStyle _windowStyle;
     private Texture2D _bgTex;
@@ -22,7 +23,9 @@ public class Plugin : BaseUnityPlugin
     {
         Enabled = Config.Bind("General", "Enabled", true, "Show debug graphs");
         SaveData = Config.Bind("General", "SaveData", false, "Toggle ON to save all chart data to file");
+        DeleteData = Config.Bind("General", "DeleteData", false, "Toggle ON to delete all saved CSV files");
         SaveData.SettingChanged += (_, _) => { if (SaveData.Value) { DoSaveData(); SaveData.Value = false; } };
+        DeleteData.SettingChanged += (_, _) => { if (DeleteData.Value) { DoClearData(); DeleteData.Value = false; } };
     }
 
     private void EnsureStyle()
@@ -124,5 +127,20 @@ public class Plugin : BaseUnityPlugin
             Logger.LogInfo("Chart data saved");
         }
         catch (Exception ex) { Logger.LogError($"SaveData failed: {ex.Message}"); }
+    }
+
+    private void DoClearData()
+    {
+        try
+        {
+            string dir = Path.Combine(Paths.ConfigPath, "nuclearoption.debuggraphmod_data");
+            if (Directory.Exists(dir))
+            {
+                foreach (var f in Directory.GetFiles(dir, "*.csv"))
+                    File.Delete(f);
+            }
+            Logger.LogInfo("Saved CSV files cleared");
+        }
+        catch (Exception ex) { Logger.LogError($"ClearData failed: {ex.Message}"); }
     }
 }
