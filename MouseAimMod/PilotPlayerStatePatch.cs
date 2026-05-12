@@ -67,9 +67,6 @@ public static class PilotPlayerStatePatch
         Vector3 localAV = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
 
         if (localTarget.z < 0f) vertDev = Mathf.Sign(vertDev);
-        float exp = Plugin.ErrorExp.Value;
-        horizDev = Mathf.Sign(horizDev) * Mathf.Pow(Mathf.Abs(horizDev), exp);
-        vertDev  = Mathf.Sign(vertDev)  * Mathf.Pow(Mathf.Abs(vertDev),  exp);
 
         float pitchError = -vertDev, yawError = horizDev;
         float rollAngle = aircraft.transform.eulerAngles.z;
@@ -85,7 +82,8 @@ public static class PilotPlayerStatePatch
         if (!_mpcInitialized) { _mpcInitialized = true; }
 
         float dt = Time.fixedDeltaTime;
-        float kPitch = Plugin.MpcK.Value, kRoll = Plugin.MpcK.Value, kYaw = Plugin.MpcK.Value;
+        float kBase = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlpha.Value, 0.001f)) / dt;
+        float kPitch = kBase, kRoll = kBase, kYaw = kBase;
 
         var fbw = aircraft.GetControlsFilter();
         if (fbw != null)
@@ -93,13 +91,13 @@ public static class PilotPlayerStatePatch
             var (_, p) = fbw.GetFlyByWireParameters();
             float cornerSpeed = p[2];
             float yawTightness = p[13];
+            float rollTightness = p[14];
             float rho = aircraft.airDensity;
             float speed = Mathf.Max(aircraft.speed, 7.07f);
             float qRatio = Mathf.Clamp01(cornerSpeed * cornerSpeed * 1.225f / (rho * speed * speed));
-            float kBase = Plugin.MpcK.Value;
             kPitch = kBase * qRatio;
-            kRoll  = kBase * qRatio;
-            kYaw   = kBase * qRatio * yawTightness;
+            kRoll  = kBase * qRatio / Mathf.Max(rollTightness, 0.1f);
+            kYaw   = kBase * qRatio / Mathf.Max(yawTightness, 0.1f);
 
             if (fbw.GetType().Name == "HeloControlsFilter")
             {
@@ -112,9 +110,9 @@ public static class PilotPlayerStatePatch
             }
         }
 
-        float pitchOut = Mpc(pitchError, localAV.x, dt, kPitch, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
-        float rollOut  = Mpc(rollError,  localAV.z, dt, kRoll,  Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
-        float yawOut   = Mpc(yawError,   localAV.y, dt, kYaw,   Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value);
+        float pitchOut = Mpc(pitchError, localAV.x, dt, kPitch, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value, Plugin.MpcDecay.Value);
+        float rollOut  = Mpc(rollError,  localAV.z, dt, kRoll,  Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value, Plugin.MpcDecay.Value);
+        float yawOut   = Mpc(yawError,   localAV.y, dt, kYaw,   Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value, Plugin.MpcDecay.Value);
 
         pitchOut = Mathf.Clamp(pitchOut * Plugin.MpcScale.Value, -1f, 1f);
         rollOut  = Mathf.Clamp(rollOut  * Plugin.MpcScale.Value, -1f, 1f);
@@ -133,7 +131,7 @@ public static class PilotPlayerStatePatch
 
         Plugin.PushDebugData(pitchError, rollError, yawError, pitchOut, rollOut, yawOut);
         Plugin.PushDebugCoord(yawOut, pitchOut, rollOut, -1f);
-        Plugin.PushDebugDynK(kPitch / Plugin.MpcK.Value, kRoll / Plugin.MpcK.Value, kYaw / Plugin.MpcK.Value);
+        Plugin.PushDebugDynK(kPitch / kBase, kRoll / kBase, kYaw / kBase);
 
         if (controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
@@ -161,35 +159,38 @@ public static class PilotPlayerStatePatch
         }
     }
 
-    static float EvalCost(float u, float omega, float errorRad, float k, int horizon, float dt, float penalty)
+    static float EvalCost(float u, float omega, float errorRad, float k, int horizon, float dt, float penalty, float decay)
     {
         float w = omega, e = errorRad;
         float alpha = 1f - Mathf.Exp(-k * dt);
         float ak = k > 0.0001f ? alpha / k : dt;
         float cost = 0f;
+        float uf = u;
         for (int f = 0; f < horizon; f++)
         {
             float w0 = w;
-            w += alpha * (u - w);
-            e -= u * dt + (w0 - u) * ak;
+            w += alpha * (uf - w);
+            e -= uf * dt + (w0 - uf) * ak;
             cost += e * e + w * w * dt * dt;
+            float d = 1f - decay;
+            uf *= 1f - d * d * d * d;
         }
         if (Mathf.Abs(errorRad) > 0.005f && Mathf.Sign(e) != Mathf.Sign(errorRad)) cost += e * e * penalty;
         return cost;
     }
 
-    static float Mpc(float errorSin, float omega, float dt, float k, int horizon, int iters, float penalty)
+    static float Mpc(float errorSin, float omega, float dt, float k, int horizon, int iters, float penalty, float decay)
     {
         float errorRad = Mathf.Asin(Mathf.Clamp(errorSin, -0.999f, 0.999f));
         float lo = -1f, hi = 1f;
         float phi = 0.618034f;
         float c = hi - phi * (hi - lo), d = lo + phi * (hi - lo);
-        float fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty);
-        float fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty);
+        float fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty, decay);
+        float fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty, decay);
         for (int i = 0; i < iters; i++)
         {
-            if (fc < fd) { hi = d; d = c; fd = fc; c = hi - phi * (hi - lo); fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty); }
-            else { lo = c; c = d; fc = fd; d = lo + phi * (hi - lo); fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty); }
+            if (fc < fd) { hi = d; d = c; fd = fc; c = hi - phi * (hi - lo); fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty, decay); }
+            else { lo = c; c = d; fc = fd; d = lo + phi * (hi - lo); fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty, decay); }
         }
         return (lo + hi) * 0.5f;
     }

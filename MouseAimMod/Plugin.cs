@@ -29,15 +29,14 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> CenteringRange;
     internal static ConfigEntry<float> CenteringGain;
 
-    internal static ConfigEntry<float> ErrorExp;
-
-    internal static ConfigEntry<float> MpcK;
+    internal static ConfigEntry<float> MpcAlpha;
     internal static ConfigEntry<float> MpcPenalty;
     internal static ConfigEntry<int> MpcHorizon;
     internal static ConfigEntry<int> MpcIter;
     internal static ConfigEntry<float> MpcScale;
     internal static ConfigEntry<int> SaturationHold;
     internal static ConfigEntry<float> SaturationSens;
+    internal static ConfigEntry<float> MpcDecay;
 
     internal static ConfigEntry<float> YawAttenStart;
     internal static ConfigEntry<float> YawAttenEnd;
@@ -67,13 +66,10 @@ public class Plugin : BaseUnityPlugin
         MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
         InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
         StabilityKbEnabled = Config.Bind("General", "StabilityKill", false, "Temporarily disable flight assist while keyboard pitch is active");
-        ErrorExp = Config.Bind("MPC", "ErrorExp", 0.9f,
-            new ConfigDescription("Error power exponent. 1=linear, >1=suppress small errors",
-                new AcceptableValueRange<float>(0.5f, 2f)));
 
-        MpcK = Config.Bind("MPC", "K", 50f,
-            new ConfigDescription("K=100→87%/frame, K=50→63%/frame, K=10→18%/frame, K=1→2%/frame toward target angular rate",
-                new AcceptableValueRange<float>(0f, 100f)));
+        MpcAlpha = Config.Bind("MPC", "Alpha", 0.5f,
+            new ConfigDescription("Per-frame convergence rate α. K = −ln(1−α)/0.02. α=0.87→K=100, α=0.63→K=50, α=0.18→K=10, α=0.02→K=1",
+                new AcceptableValueRange<float>(0f, 1f)));
         MpcPenalty = Config.Bind("MPC", "Penalty", 3f,
             new ConfigDescription("Overshoot penalty multiplier",
                 new AcceptableValueRange<float>(0f, 10f)));
@@ -92,6 +88,9 @@ public class Plugin : BaseUnityPlugin
         SaturationSens = Config.Bind("MPC", "SaturationSens", 1.75f,
             new ConfigDescription("Saturation detection sensitivity. Higher = triggers earlier",
                 new AcceptableValueRange<float>(0f, 5f)));
+        MpcDecay = Config.Bind("MPC", "Decay", 1f,
+            new ConfigDescription("Control decay over horizon. 1=constant, 0.95=5%/frame decay, 0=zero after frame 0",
+                new AcceptableValueRange<float>(0f, 1f)));
 
         RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
         YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,
