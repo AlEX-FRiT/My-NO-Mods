@@ -13,7 +13,7 @@ namespace MouseAimMod;
 
 public enum PresetSlot { Slot1, Slot2, Slot3, Slot4, Slot5 }
 
-[BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "1.0.0")]
+[BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "1.3.3")]
 [BepInProcess("NuclearOption.exe")]
 [BepInDependency("nuclearoption.debuggraphmod", BepInDependency.DependencyFlags.SoftDependency)]
 public class Plugin : BaseUnityPlugin
