@@ -29,7 +29,9 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> CenteringRange;
     internal static ConfigEntry<float> CenteringGain;
 
-    internal static ConfigEntry<float> MpcAlpha;
+    internal static ConfigEntry<float> MpcAlphaPitch;
+    internal static ConfigEntry<float> MpcAlphaRoll;
+    internal static ConfigEntry<float> MpcAlphaYaw;
     internal static ConfigEntry<float> MpcPenalty;
     internal static ConfigEntry<int> MpcHorizon;
     internal static ConfigEntry<int> MpcIter;
@@ -67,8 +69,14 @@ public class Plugin : BaseUnityPlugin
         InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
         StabilityKbEnabled = Config.Bind("General", "StabilityKill", false, "Temporarily disable flight assist while keyboard pitch is active");
 
-        MpcAlpha = Config.Bind("MPC", "Alpha", 0.5f,
-            new ConfigDescription("Per-frame convergence rate α. K = −ln(1−α)/0.02. α=0.87→K=100, α=0.63→K=50, α=0.18→K=10, α=0.02→K=1",
+        MpcAlphaPitch = Config.Bind("MPC", "AlphaPitch", 0.5f,
+            new ConfigDescription("Per-frame convergence rate for pitch. K = −ln(1−α)/0.02. α=0.87→K=100, α=0.63→K=50, α=0.18→K=10, α=0.02→K=1",
+                new AcceptableValueRange<float>(0f, 1f)));
+        MpcAlphaRoll = Config.Bind("MPC", "AlphaRoll", 0.5f,
+            new ConfigDescription("Per-frame convergence rate for roll. K = −ln(1−α)/0.02",
+                new AcceptableValueRange<float>(0f, 1f)));
+        MpcAlphaYaw = Config.Bind("MPC", "AlphaYaw", 0.5f,
+            new ConfigDescription("Per-frame convergence rate for yaw. K = −ln(1−α)/0.02",
                 new AcceptableValueRange<float>(0f, 1f)));
         MpcPenalty = Config.Bind("MPC", "Penalty", 3f,
             new ConfigDescription("Overshoot penalty multiplier",

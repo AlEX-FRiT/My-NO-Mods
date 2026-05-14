@@ -82,8 +82,10 @@ public static class PilotPlayerStatePatch
         if (!_mpcInitialized) { _mpcInitialized = true; }
 
         float dt = Time.fixedDeltaTime;
-        float kBase = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlpha.Value, 0.001f)) / dt;
-        float kPitch = kBase, kRoll = kBase, kYaw = kBase;
+        float kP = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlphaPitch.Value, 0.001f)) / dt;
+        float kR = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlphaRoll.Value,  0.001f)) / dt;
+        float kY = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlphaYaw.Value,   0.001f)) / dt;
+        float kPitch = kP, kRoll = kR, kYaw = kY;
 
         var fbw = aircraft.GetControlsFilter();
         if (fbw != null)
@@ -95,9 +97,9 @@ public static class PilotPlayerStatePatch
             float rho = aircraft.airDensity;
             float speed = Mathf.Max(aircraft.speed, 7.07f);
             float qRatio = Mathf.Clamp01(cornerSpeed * cornerSpeed * 1.225f / (rho * speed * speed));
-            kPitch = kBase * qRatio;
-            kRoll  = kBase * qRatio / Mathf.Max(rollTightness, 0.1f);
-            kYaw   = kBase * qRatio / Mathf.Max(yawTightness, 0.1f);
+            kPitch = kP * qRatio;
+            kRoll  = kR * qRatio / Mathf.Max(rollTightness, 0.1f);
+            kYaw   = kY * qRatio / Mathf.Max(yawTightness, 0.1f);
 
             if (fbw.GetType().Name == "HeloControlsFilter")
             {
@@ -106,7 +108,7 @@ public static class PilotPlayerStatePatch
                 float wvMin = hfbw.Field("yawWeathervaneMinSpeed").GetValue<float>();
                 float wvMax = hfbw.Field("yawWeathervaneMaxSpeed").GetValue<float>();
                 float t = Mathf.Clamp01((speed - wvMin) / (wvMax - wvMin));
-                kYaw += kBase * wvs * t * 0.5f;
+                kYaw += kY * wvs * t * 0.5f;
             }
         }
 
@@ -131,7 +133,7 @@ public static class PilotPlayerStatePatch
 
         Plugin.PushDebugData(pitchError, rollError, yawError, pitchOut, rollOut, yawOut);
         Plugin.PushDebugCoord(yawOut, pitchOut, rollOut, -1f);
-        Plugin.PushDebugDynK(kPitch / kBase, kRoll / kBase, kYaw / kBase);
+        Plugin.PushDebugDynK(kPitch / kP, kRoll / kR, kYaw / kY);
 
         if (controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
