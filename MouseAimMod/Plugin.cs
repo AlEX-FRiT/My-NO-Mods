@@ -13,36 +13,37 @@ namespace MouseAimMod;
 
 public enum PresetSlot { Slot1, Slot2, Slot3, Slot4, Slot5 }
 
-[BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "1.3.3")]
+[BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "2.0.0")]
 [BepInProcess("NuclearOption.exe")]
 [BepInDependency("nuclearoption.debuggraphmod", BepInDependency.DependencyFlags.SoftDependency)]
+[BepInDependency("nuclearoption.camerastabilizermod", BepInDependency.DependencyFlags.SoftDependency)]
 public class Plugin : BaseUnityPlugin
 {
     internal static new ManualLogSource Logger;
+
+    private static PropertyInfo _stabilizerEnabledProp;
+
+    internal static bool StabilizerEnabled()
+    {
+        if (_stabilizerEnabledProp == null)
+        {
+            var t = Type.GetType("CameraStabilizerMod.Plugin, CameraStabilizerMod");
+            _stabilizerEnabledProp = t?.GetProperty("IsEnabled", BindingFlags.Public | BindingFlags.Static);
+        }
+        if (_stabilizerEnabledProp == null) return false;
+        try { return (bool)_stabilizerEnabledProp.GetValue(null); }
+        catch { return false; }
+    }
 
     internal static ConfigEntry<bool> MouseAimEnabled;
     internal static ConfigEntry<bool> InvertFreeLook;
     internal static ConfigEntry<float> HoverExitAngle;
     internal static ConfigEntry<bool> StabilityKbEnabled;
 
-    internal static ConfigEntry<bool> RollCentering;
-    internal static ConfigEntry<float> CenteringRange;
-    internal static ConfigEntry<float> CenteringGain;
-
-    internal static ConfigEntry<float> MpcAlphaPitch;
-    internal static ConfigEntry<float> MpcAlphaRoll;
-    internal static ConfigEntry<float> MpcAlphaYaw;
-    internal static ConfigEntry<float> MpcPenalty;
-    internal static ConfigEntry<int> MpcHorizon;
-    internal static ConfigEntry<int> MpcIter;
-    internal static ConfigEntry<float> MpcScale;
-    internal static ConfigEntry<int> SaturationHold;
-    internal static ConfigEntry<float> SaturationSens;
-    internal static ConfigEntry<float> MpcDecay;
-
-    internal static ConfigEntry<float> YawAttenStart;
-    internal static ConfigEntry<float> YawAttenEnd;
-    internal static ConfigEntry<bool> RollYawBalance;
+    // 简易比例映射增益：u = Kp * e（e 为目标方位在机体坐标系下的分量）
+    internal static ConfigEntry<float> PropGainPitch;
+    internal static ConfigEntry<float> PropGainYaw;
+    internal static ConfigEntry<float> RollBlend;
 
     internal static ConfigEntry<PresetSlot> ActivePreset;
     internal static ConfigEntry<bool> SavePreset;
@@ -52,9 +53,7 @@ public class Plugin : BaseUnityPlugin
     private static object _pitchErrStream, _pitchOutStream;
     private static object _rollErrStream, _rollOutStream;
     private static object _yawErrStream, _yawOutStream;
-    private static object _fbwInStream, _fbwOutStream;
     private static object _coordPrStream, _coordYwStream;
-    private static object _dynKpStream, _dynKrStream, _dynKyStream;
     private static MethodInfo _debugPushMethod;
     private static MethodInfo _debugPushXyMethod;
 
@@ -68,56 +67,19 @@ public class Plugin : BaseUnityPlugin
         MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
         InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
         StabilityKbEnabled = Config.Bind("General", "StabilityKill", false, "Temporarily disable flight assist while keyboard pitch is active");
-
-        MpcAlphaPitch = Config.Bind("MPC", "AlphaPitch", 0.5f,
-            new ConfigDescription("Per-frame convergence rate for pitch. K = −ln(1−α)/0.02. α=0.87→K=100, α=0.63→K=50, α=0.18→K=10, α=0.02→K=1",
-                new AcceptableValueRange<float>(0f, 1f)));
-        MpcAlphaRoll = Config.Bind("MPC", "AlphaRoll", 0.5f,
-            new ConfigDescription("Per-frame convergence rate for roll. K = −ln(1−α)/0.02",
-                new AcceptableValueRange<float>(0f, 1f)));
-        MpcAlphaYaw = Config.Bind("MPC", "AlphaYaw", 0.5f,
-            new ConfigDescription("Per-frame convergence rate for yaw. K = −ln(1−α)/0.02",
-                new AcceptableValueRange<float>(0f, 1f)));
-        MpcPenalty = Config.Bind("MPC", "Penalty", 3f,
-            new ConfigDescription("Overshoot penalty multiplier",
-                new AcceptableValueRange<float>(0f, 10f)));
-        MpcHorizon = Config.Bind("MPC", "Horizon", 50,
-            new ConfigDescription("Look-ahead frames. K × Horizon × 0.02 should be ≥ 3 to avoid myopic oscillation",
-                new AcceptableValueRange<int>(0, 100)));
-        MpcIter = Config.Bind("MPC", "Iterations", 10,
-            new ConfigDescription("Golden-section search iterations",
-                new AcceptableValueRange<int>(3, 50)));
-        MpcScale = Config.Bind("MPC", "Scale", 1f,
-            new ConfigDescription("Output scale applied before clamp to FBW",
-                new AcceptableValueRange<float>(0f, 2f)));
-        SaturationHold = Config.Bind("MPC", "SaturationHold", 50,
-            new ConfigDescription("Pause MPC output when FBW is saturated, for this many frames",
-                new AcceptableValueRange<int>(0, 200)));
-        SaturationSens = Config.Bind("MPC", "SaturationSens", 1.75f,
-            new ConfigDescription("Saturation detection sensitivity. Higher = triggers earlier",
-                new AcceptableValueRange<float>(0f, 5f)));
-        MpcDecay = Config.Bind("MPC", "Decay", 1f,
-            new ConfigDescription("Control decay over horizon. 1=constant, 0.95=5%/frame decay, 0=zero after frame 0",
-                new AcceptableValueRange<float>(0f, 1f)));
-
-        RollYawBalance = Config.Bind("Roll/Yaw Balance", "Enable", false, "Enable roll/yaw balance attenuation");
-        YawAttenStart = Config.Bind("Roll/Yaw Balance", "AttenStart", 30f,
-            new ConfigDescription("Total view deviation (deg) where yaw reduction begins",
-                new AcceptableValueRange<float>(0f, 180f)));
-        YawAttenEnd = Config.Bind("Roll/Yaw Balance", "AttenEnd", 60f,
-            new ConfigDescription("Total view deviation (deg) where yaw reaches zero",
-                new AcceptableValueRange<float>(0f, 180f)));
-
-        RollCentering = Config.Bind("Roll Centering", "RollCentering", false, "Auto roll back to level when camera is near center");
-        CenteringRange = Config.Bind("Roll Centering", "CenteringRange", 0.25f,
-            new ConfigDescription("Horizontal deviation range for roll centering (sin units, ~15°)",
-                new AcceptableValueRange<float>(0.01f, 0.35f)));
-        CenteringGain = Config.Bind("Roll Centering", "CenteringGain", 0.3f,
-            new ConfigDescription("Roll centering strength gain",
-                new AcceptableValueRange<float>(0f, 1f)));
         HoverExitAngle = Config.Bind("Hover", "ExitAngle", 20f,
             new ConfigDescription("Pitch or roll angle exceeding this disables hover throttle",
                 new AcceptableValueRange<float>(5f, 60f)));
+
+        PropGainPitch = Config.Bind("Proportional", "GainPitch", 2f,
+            new ConfigDescription("Proportional gain for pitch: pitch = -Kp * sin(vertical deviation)",
+                new AcceptableValueRange<float>(0f, 20f)));
+        PropGainYaw = Config.Bind("Proportional", "GainYaw", 2f,
+            new ConfigDescription("Proportional gain for yaw: yaw = Kp * sin(horizontal deviation)",
+                new AcceptableValueRange<float>(0f, 20f)));
+        RollBlend = Config.Bind("Proportional", "RollBlend", 0.5f,
+            new ConfigDescription("Roll target/velocity blend ratio; |X|,|Y| within this band mix proportionally",
+                new AcceptableValueRange<float>(0.001f, 1f)));
 
         ActivePreset = Config.Bind("Presets", "ActivePreset", PresetSlot.Slot1, "Select preset slot for save/load.");
         SavePreset = Config.Bind("Presets", "SavePreset", false, "Toggle ON to save current config to active preset.");
@@ -125,8 +87,6 @@ public class Plugin : BaseUnityPlugin
 
         SavePreset.SettingChanged += (_, _) => { if (SavePreset.Value) { SaveToPreset(ActivePreset.Value); SavePreset.Value = false; } };
         LoadPreset.SettingChanged += (_, _) => { if (LoadPreset.Value) { LoadFromPreset(ActivePreset.Value); LoadPreset.Value = false; } };
-
-        MouseAimEnabled.SettingChanged += (_, _) => { CameraAimState.MouseAimEnabled = MouseAimEnabled.Value; };
 
         _harmony = new Harmony("nuclearoption.mouseaimmod");
         _harmony.PatchAll();
@@ -162,22 +122,12 @@ public class Plugin : BaseUnityPlugin
             _yawErrStream = addStream.Invoke(yawChart, new object[] { "Err", Color.green });
             _yawOutStream = addStream.Invoke(yawChart, new object[] { "Out", Color.yellow });
 
-            var fbwChart = createChart.Invoke(null, new[] { flowVal, "FBW Pitch", 480f, 200f, -1f, 1f, 600, null, null });
-            var addF = fbwChart.GetType().GetMethod("AddStream");
-            _fbwInStream  = addF.Invoke(fbwChart, new object[] { "In", Color.green });
-            _fbwOutStream = addF.Invoke(fbwChart, new object[] { "Out", Color.yellow });
-
             var coordVal = Enum.Parse(chartTypeEnum, "Coordinate");
             var xyChart = createChart.Invoke(null, new object[] { coordVal, "Stick XY", 480f, 200f, -1f, 1f, 5, -1f, 1f });
             var addC = xyChart.GetType().GetMethod("AddStream");
             _coordPrStream = addC.Invoke(xyChart, new object[] { "P/R", Color.cyan });
             _coordYwStream = addC.Invoke(xyChart, new object[] { "Yaw", Color.yellow });
 
-            var dkChart = createChart.Invoke(null, new[] { flowVal, "Dyn K %", 480f, 150f, 0f, 5f, 600, null, null });
-            var addD = dkChart.GetType().GetMethod("AddStream");
-            _dynKpStream = addD.Invoke(dkChart, new object[] { "Pitch", Color.green });
-            _dynKrStream = addD.Invoke(dkChart, new object[] { "Roll", Color.cyan });
-            _dynKyStream = addD.Invoke(dkChart, new object[] { "Yaw", Color.yellow });
             _debugAvailable = true;
             Logger.LogInfo("DebugGraphMod charts registered");
         }
@@ -200,18 +150,6 @@ public class Plugin : BaseUnityPlugin
         catch { _debugAvailable = false; }
     }
 
-    internal static void PushDebugFbw(float inP, float outP)
-    {
-        if (!_debugAvailable) return;
-        try
-        {
-            if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
-            _debugPushMethod.Invoke(_fbwInStream, new object[] { inP });
-            _debugPushMethod.Invoke(_fbwOutStream, new object[] { outP });
-        }
-        catch { _debugAvailable = false; }
-    }
-
     internal static void PushDebugCoord(float prX, float prY, float ywX, float ywY)
     {
         if (!_debugAvailable) return;
@@ -221,19 +159,6 @@ public class Plugin : BaseUnityPlugin
                 _debugPushXyMethod = _coordPrStream.GetType().GetMethod("PushXy");
             _debugPushXyMethod.Invoke(_coordPrStream, new object[] { prX, prY });
             _debugPushXyMethod.Invoke(_coordYwStream, new object[] { ywX, ywY });
-        }
-        catch { _debugAvailable = false; }
-    }
-
-    internal static void PushDebugDynK(float kp, float kr, float ky)
-    {
-        if (!_debugAvailable) return;
-        try
-        {
-            if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
-            _debugPushMethod.Invoke(_dynKpStream, new object[] { kp });
-            _debugPushMethod.Invoke(_dynKrStream, new object[] { kr });
-            _debugPushMethod.Invoke(_dynKyStream, new object[] { ky });
         }
         catch { _debugAvailable = false; }
     }

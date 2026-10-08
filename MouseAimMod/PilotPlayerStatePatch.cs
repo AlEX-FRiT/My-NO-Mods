@@ -6,17 +6,14 @@ namespace MouseAimMod;
 [HarmonyPatch(typeof(PilotPlayerState), "PlayerAxisControls")]
 public static class PilotPlayerStatePatch
 {
-    private static bool _mpcInitialized;
     private static bool _stabilityKilled;
     private static bool _stabilityOrig;
-    private static float _fbwInputPitch;
-    private static int _saturationTimer;
 
     [HarmonyPatch("PlayerControls")]
     [HarmonyPostfix]
     public static void PlayerControlsPostfix(PilotPlayerState __instance, Pilot ___pilot)
     {
-        if (!CameraAimState.MouseAimEnabled) return;
+        if (!Plugin.MouseAimEnabled.Value || !Plugin.StabilizerEnabled()) return;
         if (PlayerSettings.virtualJoystickEnabled) return;
         if (!FlightHudStatePatch.CanvasEnabled) return;
         var pilot = ___pilot;
@@ -39,7 +36,7 @@ public static class PilotPlayerStatePatch
     [HarmonyPostfix]
     public static void PlayerAxisControlsPostfix(PilotPlayerState __instance, Pilot ___pilot, ControlInputs ___controlInputs)
     {
-        if (!CameraAimState.MouseAimEnabled) return;
+        if (!Plugin.MouseAimEnabled.Value || !Plugin.StabilizerEnabled()) return;
         if (PlayerSettings.virtualJoystickEnabled) return;
         if (!FlightHudStatePatch.CanvasEnabled) return;
 
@@ -58,82 +55,21 @@ public static class PilotPlayerStatePatch
             HoverThrottleController.ApplyHoverThrottle(controlInputs, aircraft);
 
         bool aimActive = Plugin.InvertFreeLook.Value ? freeLook : !freeLook;
-        if (!aimActive) { _mpcInitialized = false; return; }
+        if (!aimActive) return;
         if (Camera.main == null) return;
 
+        // 目标输入：视线方向在机体坐标系下的目标方位向量
         Vector3 viewDirection = Camera.main.transform.forward;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
-        float horizDev = localTarget.x, vertDev = localTarget.y;
-        Vector3 localAV = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
+        Vector3 localVelocityDir = aircraft.transform.InverseTransformDirection(aircraft.rb.velocity.normalized);
 
-        if (localTarget.z < 0f) vertDev = Mathf.Sign(vertDev);
+        Vector3 control = ProportionalControl.ComputeControlFromTarget(localTarget, localVelocityDir);
+        float pitchOut = control.x;
+        float yawOut   = control.y;
+        float rollOut  = control.z;
 
-        float pitchError = -vertDev, yawError = horizDev;
-        float rollAngle = aircraft.transform.eulerAngles.z;
-        if (rollAngle > 180f) rollAngle -= 360f;
-        float rollError = horizDev;
-        if (Plugin.RollCentering.Value)
-        {
-            float s = Mathf.Sin(rollAngle * Mathf.Deg2Rad);
-            float f = 1f - Mathf.Clamp01(Mathf.Abs(horizDev) / Plugin.CenteringRange.Value);
-            rollError = horizDev + s * f * Plugin.CenteringGain.Value;
-        }
-
-        if (!_mpcInitialized) { _mpcInitialized = true; }
-
-        float dt = Time.fixedDeltaTime;
-        float kP = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlphaPitch.Value, 0.001f)) / dt;
-        float kR = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlphaRoll.Value,  0.001f)) / dt;
-        float kY = -Mathf.Log(Mathf.Max(1f - Plugin.MpcAlphaYaw.Value,   0.001f)) / dt;
-        float kPitch = kP, kRoll = kR, kYaw = kY;
-
-        var fbw = aircraft.GetControlsFilter();
-        if (fbw != null)
-        {
-            var (_, p) = fbw.GetFlyByWireParameters();
-            float cornerSpeed = p[2];
-            float yawTightness = p[13];
-            float rollTightness = p[14];
-            float rho = aircraft.airDensity;
-            float speed = Mathf.Max(aircraft.speed, 7.07f);
-            float qRatio = Mathf.Clamp01(cornerSpeed * cornerSpeed * 1.225f / (rho * speed * speed));
-            kPitch = kP * qRatio;
-            kRoll  = kR * qRatio / Mathf.Max(rollTightness, 0.1f);
-            kYaw   = kY * qRatio / Mathf.Max(yawTightness, 0.1f);
-
-            if (fbw.GetType().Name == "HeloControlsFilter")
-            {
-                var hfbw = Traverse.Create(fbw).Field("heloFlyByWire");
-                float wvs = hfbw.Field("yawWeathervaneStrength").GetValue<float>();
-                float wvMin = hfbw.Field("yawWeathervaneMinSpeed").GetValue<float>();
-                float wvMax = hfbw.Field("yawWeathervaneMaxSpeed").GetValue<float>();
-                float t = Mathf.Clamp01((speed - wvMin) / (wvMax - wvMin));
-                kYaw += kY * wvs * t * 0.5f;
-            }
-        }
-
-        float pitchOut = Mpc(pitchError, localAV.x, dt, kPitch, Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value, Plugin.MpcDecay.Value);
-        float rollOut  = Mpc(rollError,  localAV.z, dt, kRoll,  Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value, Plugin.MpcDecay.Value);
-        float yawOut   = Mpc(yawError,   localAV.y, dt, kYaw,   Plugin.MpcHorizon.Value, Plugin.MpcIter.Value, Plugin.MpcPenalty.Value, Plugin.MpcDecay.Value);
-
-        pitchOut = Mathf.Clamp(pitchOut * Plugin.MpcScale.Value, -1f, 1f);
-        rollOut  = Mathf.Clamp(rollOut  * Plugin.MpcScale.Value, -1f, 1f);
-        yawOut   = Mathf.Clamp(yawOut   * Plugin.MpcScale.Value, -1f, 1f);
-
-        pitchOut = ApplyPaCompensation(pitchOut, aircraft, localAV.x);
-        _fbwInputPitch = pitchOut;
-
-        float yawScale = 1f;
-        if (Plugin.RollYawBalance.Value)
-        {
-            float d = Vector3.Angle(aircraft.transform.forward, Camera.main.transform.forward);
-            yawScale = 1f - Mathf.Clamp01((d - Plugin.YawAttenStart.Value) / (Plugin.YawAttenEnd.Value - Plugin.YawAttenStart.Value));
-        }
-        yawOut *= yawScale;
-
-        Plugin.PushDebugData(pitchError, rollError, yawError, pitchOut, rollOut, yawOut);
+        Plugin.PushDebugData(-localTarget.y, localTarget.x, localTarget.x, pitchOut, rollOut, yawOut);
         Plugin.PushDebugCoord(yawOut, pitchOut, rollOut, -1f);
-        Plugin.PushDebugDynK(kPitch / kP, kRoll / kR, kYaw / kY);
 
         if (controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
@@ -152,87 +88,36 @@ public static class PilotPlayerStatePatch
     private static void FilterInputsPostfix(Aircraft __instance)
     {
         if (_stabilityKilled) { __instance.flightAssist = _stabilityOrig; _stabilityKilled = false; }
-        var fbw = __instance.GetControlsFilter();
-        if (fbw != null)
-        {
-            float pa = Traverse.Create(fbw).Field("flyByWire").Field("pitchAdjuster").GetValue<float>();
-            float fbwOut = __instance.GetInputs().pitch;
-            Plugin.PushDebugFbw(_fbwInputPitch, fbwOut);
-        }
     }
+}
 
-    static float EvalCost(float u, float omega, float errorRad, float k, int horizon, float dt, float penalty, float decay)
+/// <summary>
+/// 简易比例映射：将机体坐标系下的目标方位转化为控制量（输入目标，输出控制量）。
+/// </summary>
+public static class ProportionalControl
+{
+    /// <param name="localVelocityDir">归一化后的速度矢量在机体坐标系下的表示（各分量与 localTarget 含义一致）。</param>
+    /// <returns>控制量 (pitch, yaw, roll)，各分量已夹取到 [-1, 1]。</returns>
+    public static Vector3 ComputeControlFromTarget(Vector3 localTarget, Vector3 localVelocityDir)
     {
-        float w = omega, e = errorRad;
-        float alpha = 1f - Mathf.Exp(-k * dt);
-        float ak = k > 0.0001f ? alpha / k : dt;
-        float cost = 0f;
-        float uf = u;
-        for (int f = 0; f < horizon; f++)
-        {
-            float w0 = w;
-            w += alpha * (uf - w);
-            e -= uf * dt + (w0 - uf) * ak;
-            cost += e * e + w * w * dt * dt;
-            float d = 1f - decay;
-            uf *= 1f - d * d * d * d;
-        }
-        if (Mathf.Abs(errorRad) > 0.005f && Mathf.Sign(e) != Mathf.Sign(errorRad)) cost += e * e * penalty;
-        return cost;
-    }
+        float horizDev = localTarget.x;
+        float vertDev  = localTarget.y;
+        // 目标位于机身后方时，垂直偏差方向取反
+        if (localTarget.z < 0f) vertDev = Mathf.Sign(vertDev);
 
-    static float Mpc(float errorSin, float omega, float dt, float k, int horizon, int iters, float penalty, float decay)
-    {
-        float errorRad = Mathf.Asin(Mathf.Clamp(errorSin, -0.999f, 0.999f));
-        float lo = -1f, hi = 1f;
-        float phi = 0.618034f;
-        float c = hi - phi * (hi - lo), d = lo + phi * (hi - lo);
-        float fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty, decay);
-        float fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty, decay);
-        for (int i = 0; i < iters; i++)
-        {
-            if (fc < fd) { hi = d; d = c; fd = fc; c = hi - phi * (hi - lo); fc = EvalCost(c, omega, errorRad, k, horizon, dt, penalty, decay); }
-            else { lo = c; c = d; fc = fd; d = lo + phi * (hi - lo); fd = EvalCost(d, omega, errorRad, k, horizon, dt, penalty, decay); }
-        }
-        return (lo + hi) * 0.5f;
-    }
+        // u = Kp * e
+        float pitch = Mathf.Clamp(-vertDev * Plugin.PropGainPitch.Value, -1f, 1f);
+        float yaw   = Mathf.Clamp( horizDev * Plugin.PropGainYaw.Value,   -1f, 1f);
 
-    static float ApplyPaCompensation(float mpcOut, Aircraft aircraft, float localAV)
-    {
-        var fbw = aircraft.GetControlsFilter();
-        if (fbw == null) return mpcOut;
-        var fw = Traverse.Create(fbw).Field("flyByWire");
-        float pa = fw.Field("pitchAdjuster").GetValue<float>();
-        float df = fw.Field("directControlFactor").GetValue<float>();
+        // roll = X·wX - Y·wY，X/Y 为目标/速度在水平面内偏离机头轴线的归一化分量（右为正）
+        float t = Mathf.Max(Plugin.RollBlend.Value, 0.0001f);
+        float X = Mathf.Clamp(horizDev, -1f, 1f);
+        float Y = Mathf.Clamp(localVelocityDir.x, -1f, 1f);
+        float ax = Mathf.Abs(X), ay = Mathf.Abs(Y);
+        float wX = ax >= t ? 1f : ax / t;
+        float wY = ay >= t ? 0f : 1f - ay / t;
+        float roll = Mathf.Clamp(X * wX - Y * wY, -1f, 1f);
 
-        var (_, p) = fbw.GetFlyByWireParameters();
-        float cornerSpeed = p[2];
-        float speed = aircraft.speed, rho = aircraft.airDensity;
-        float qRatio = Mathf.Clamp01(cornerSpeed * cornerSpeed * 1.225f / Mathf.Max(rho * speed * speed, 50f));
-        float maxPitchAV = p[1];
-
-        float sens = Plugin.SaturationSens.Value;
-        float predictedFbwOut = -(localAV - mpcOut * maxPitchAV) * df * qRatio + pa;
-        if (Mathf.Abs(predictedFbwOut) * sens >= 0.99f)
-        {
-            _saturationTimer = Plugin.SaturationHold.Value;
-            return 0f;
-        }
-        if (_saturationTimer > 0)
-        {
-            if (Mathf.Abs(localAV) < Mathf.Abs(mpcOut * maxPitchAV) && 
-                Mathf.Sign(localAV) == Mathf.Sign(mpcOut) && Mathf.Abs(pa) < 0.3f)
-                _saturationTimer = 0;
-            else
-            {
-                _saturationTimer--;
-                return 0f;
-            }
-        }
-
-        if (Mathf.Abs(pa) < 0.001f || df < 0.001f) return mpcOut;
-        float denom = df * qRatio * maxPitchAV;
-        if (denom < 0.001f) return mpcOut;
-        return Mathf.Clamp(mpcOut - pa / denom, -1f, 1f);
+        return new Vector3(pitch, yaw, roll);
     }
 }
