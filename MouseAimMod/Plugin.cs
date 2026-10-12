@@ -91,10 +91,10 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Pitch or roll angle exceeding this disables hover throttle",
                 new AcceptableValueRange<float>(5f, 60f)));
 
-        PropGainPitch = Config.Bind("Proportional", "GainPitch", 2f,
+        PropGainPitch = Config.Bind("Proportional", "GainPitch", 1f,
             new ConfigDescription("Proportional gain for pitch: pitch = -Kp * sin(vertical deviation)",
                 new AcceptableValueRange<float>(0f, 20f)));
-        PropGainYaw = Config.Bind("Proportional", "GainYaw", 2f,
+        PropGainYaw = Config.Bind("Proportional", "GainYaw", 1f,
             new ConfigDescription("Proportional gain for yaw: yaw = Kp * sin(horizontal deviation)",
                 new AcceptableValueRange<float>(0f, 20f)));
         PropGainRoll = Config.Bind("Proportional", "GainRoll", 1f,
