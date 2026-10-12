@@ -46,8 +46,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> PropGainYaw;
     internal static ConfigEntry<float> PropGainRoll;
 
-    internal static ConfigEntry<bool> LeadEnabled;
-    internal static ConfigEntry<float> LeadScale;
+    internal static ConfigEntry<float> FeedbackGain;
     internal static ConfigEntry<float> TargetFilterTau;
     internal static ConfigEntry<int> LagIntervalFrames;
     internal static ConfigEntry<int> LagRingSize;
@@ -98,9 +97,8 @@ public class Plugin : BaseUnityPlugin
             new ConfigDescription("Proportional gain for roll: roll = Kp * horizontal deviation",
                 new AcceptableValueRange<float>(0f, 20f)));
 
-        LeadEnabled = Config.Bind("Lead", "Enabled", true, "Compensate the identified plant lag with a lead term on pitch/roll.");
-        LeadScale = Config.Bind("Lead", "Scale", 1f,
-            new ConfigDescription("Multiplier on the identified tau in the lead term.",
+        FeedbackGain = Config.Bind("Feedback", "Gain", 1f,
+            new ConfigDescription("Master scale on the rate feedback: u -= Gain*Kp*tau*omega.",
                 new AcceptableValueRange<float>(0f, 3f)));
         TargetFilterTau = Config.Bind("Filter", "TargetTau", 0.05f,
             new ConfigDescription("Low-pass time constant on the input target direction (0 = off).",

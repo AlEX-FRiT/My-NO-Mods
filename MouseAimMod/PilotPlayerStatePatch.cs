@@ -8,9 +8,6 @@ public static class PilotPlayerStatePatch
 {
     private static bool _stabilityKilled;
     private static bool _stabilityOrig;
-    private static float _prevMixPitch;
-    private static float _prevMixRoll;
-    private static float _prevMixYaw;
     private static Vector3 _viewFilt;
     private static bool _filtInit;
 
@@ -106,18 +103,17 @@ public static class PilotPlayerStatePatch
         else if (Plugin.ModeForce.Value == AimMode.B) { wA = 0f; wB = 1f; }
         Vector3 u = wA * uA + wB * uB;
 
-        // lead 后级：每轴一次，只对"纯 u"求导（prev 存超前前的 u）
-        float dt = Time.fixedDeltaTime > 1e-5f ? Time.fixedDeltaTime : 0.02f;
-        float lead = Plugin.LeadEnabled.Value ? Plugin.LeadScale.Value : 0f;
-        float pitchOut = Lead(u.x, lead, LagEstimator.Tau[0], dt, ref _prevMixPitch);
-        float rollOut  = Lead(u.y, lead, LagEstimator.Tau[1], dt, ref _prevMixRoll);
-        float yawOut   = Lead(u.z, lead, LagEstimator.Tau[2], dt, ref _prevMixYaw);
+        // 速率反馈：u -= Kd·ω_corrective, Kd = FeedbackGain·GainAxis·τ（替代旧指令超前 lead）
+        Vector3 omega = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
+        float fg = Plugin.FeedbackGain.Value;
+        float pitchOut = Mathf.Clamp(u.x - fg * Plugin.PropGainPitch.Value * LagEstimator.Tau[0] * omega.x,    -1f, 1f);
+        float rollOut  = Mathf.Clamp(u.y - fg * Plugin.PropGainRoll.Value  * LagEstimator.Tau[1] * (-omega.z), -1f, 1f);
+        float yawOut   = Mathf.Clamp(u.z - fg * Plugin.PropGainYaw.Value   * LagEstimator.Tau[2] * omega.y,    -1f, 1f);
 
         if (Plugin.AimPitch.Value && controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (Plugin.AimRoll.Value  && controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
         if (Plugin.AimYaw.Value   && controlInputs.yaw   == 0f) controlInputs.yaw   = yawOut;
 
-        Vector3 omega = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
         LagEstimator.NoteAircraft(aircraft.GetInstanceID());
         LagEstimator.Sample(0, controlInputs.pitch, omega.x);
         LagEstimator.Sample(1, controlInputs.roll, omega.z);
@@ -133,14 +129,6 @@ public static class PilotPlayerStatePatch
             aircraft.flightAssist = false;
             _stabilityKilled = true;
         }
-    }
-
-    private static float Lead(float u, float scale, float tau, float dt, ref float prev)
-    {
-        float o = u;
-        if (scale > 0f && tau > 0.02f) o = Mathf.Clamp(u + scale * tau * (u - prev) / dt, -1f, 1f);
-        prev = u;
-        return o;
     }
 
     [HarmonyPatch(typeof(Aircraft), "FilterInputs")]
