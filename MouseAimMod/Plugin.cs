@@ -12,7 +12,6 @@ using HarmonyLib;
 namespace MouseAimMod;
 
 public enum PresetSlot { Slot1, Slot2, Slot3, Slot4, Slot5 }
-public enum AimMode { Mixed, A, B }
 
 [BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "2.0.0")]
 [BepInProcess("NuclearOption.exe")]
@@ -62,10 +61,6 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<int> LagSmoothWindow;
     internal static ConfigEntry<bool> LagAdaptiveSmooth;
     internal static ConfigEntry<float> LagAdaptiveK;
-    internal static ConfigEntry<float> ModeBlendX;
-    internal static ConfigEntry<float> ModeBlendY;
-    internal static ConfigEntry<float> ModePitchN;
-    internal static ConfigEntry<AimMode> ModeForce;
     internal static ConfigEntry<bool> AimPitch;
     internal static ConfigEntry<bool> AimRoll;
     internal static ConfigEntry<bool> AimYaw;
@@ -147,16 +142,6 @@ public class Plugin : BaseUnityPlugin
         LagAdaptiveK = Config.Bind("Lag", "AdaptiveK", 0.3f,
             new ConfigDescription("Adaptive smoothing: window ~= AdaptiveK * tau / dt (clamped 3..13).",
                 new AcceptableValueRange<float>(0.05f, 1f)));
-        ModeBlendX = Config.Bind("Mode", "BlendX", 0.3f,
-            new ConfigDescription("z <= BlendX -> pure A (yaw+pitch).",
-                new AcceptableValueRange<float>(0f, 1f)));
-        ModeBlendY = Config.Bind("Mode", "BlendY", 0.7f,
-            new ConfigDescription("z >= BlendY -> pure B (roll+pitch).",
-                new AcceptableValueRange<float>(0f, 1f)));
-        ModePitchN = Config.Bind("Mode", "PitchWeightN", 2f,
-            new ConfigDescription("Mode B pitch weight (1-|rollErr|)^n exponent.",
-                new AcceptableValueRange<float>(0.1f, 10f)));
-        ModeForce = Config.Bind("Mode", "ForceMode", AimMode.Mixed, "Force a single mode (Mixed/A/B).");
         AimPitch = Config.Bind("Control", "AimPitch", true, "Enable the mouse-aim output on the pitch axis (off = suppress assist pitch).");
         AimRoll = Config.Bind("Control", "AimRoll", true, "Enable the mouse-aim output on the roll axis (off = suppress assist roll).");
         AimYaw = Config.Bind("Control", "AimYaw", true, "Enable the mouse-aim output on the yaw axis (off = suppress assist yaw).");

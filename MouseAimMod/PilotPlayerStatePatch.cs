@@ -73,19 +73,16 @@ public static class PilotPlayerStatePatch
         Vector3 viewDirection = _viewFilt.normalized;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
 
-        // 误差提取（符号与已验证的现行律一致）
+        // z<0 时分量回卷，用 ±1 兜底（大角度退化为常数）以免误差归零。
         float horizDev = localTarget.x;
         float vertDev  = localTarget.y;
-        if (localTarget.z < 0f) vertDev = Mathf.Sign(vertDev);
-        float errPitchCur  = -vertDev;
-        float errYawCur    = horizDev;
-        float errRollCur   = horizDev;
-        float errRollLevel = Mathf.Clamp(aircraft.transform.right.y, -1f, 1f);
-
-        // A：yaw 管水平 / pitch 管垂直 / roll 改平 ; B：roll 管水平 / pitch 按 roll 权重压制 / yaw=0
-        float wN = Mathf.Max(1f, Plugin.ModePitchN.Value);
-        Vector3 errA = new Vector3(errPitchCur, errRollLevel, errYawCur);
-        Vector3 errB = new Vector3(errPitchCur * Mathf.Pow(1f - Mathf.Abs(errRollCur), wN), errRollCur, 0f);
+        if (localTarget.z < 0f)
+        {
+            horizDev = Mathf.Sign(horizDev);
+            vertDev  = Mathf.Sign(vertDev);
+        }
+        float errPitch = -vertDev;
+        float errHoriz = horizDev;
 
         float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
         if (Plugin.Adaptive.Value)
@@ -98,21 +95,10 @@ public static class PilotPlayerStatePatch
         float tR = Mathf.Clamp(LagEstimator.Tau[1], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
         float tY = Mathf.Clamp(LagEstimator.Tau[2], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
 
-        Vector3 uA = new Vector3(
-            ProportionalControl.Prop(errA.x, gp),
-            ProportionalControl.Prop(errA.y, gr),
-            ProportionalControl.Prop(errA.z, gy));
-        Vector3 uB = new Vector3(
-            ProportionalControl.Prop(errB.x, gp),
-            ProportionalControl.Prop(errB.y, gr),
-            ProportionalControl.Prop(errB.z, gy));
-
-        float z = Mathf.Clamp01(1f - localTarget.z);
-        float wB = Mathf.Clamp01((z - Plugin.ModeBlendX.Value) / Mathf.Max(1e-4f, Plugin.ModeBlendY.Value - Plugin.ModeBlendX.Value));
-        float wA = 1f - wB;
-        if (Plugin.ModeForce.Value == AimMode.A) { wA = 1f; wB = 0f; }
-        else if (Plugin.ModeForce.Value == AimMode.B) { wA = 0f; wB = 1f; }
-        Vector3 u = wA * uA + wB * uB;
+        Vector3 u = new Vector3(
+            ProportionalControl.Prop(errPitch, gp),
+            ProportionalControl.Prop(errHoriz, gr),
+            ProportionalControl.Prop(errHoriz, gy));
 
         // 速率反馈：u -= Kd·ω_corrective, Kd = FeedbackGain·GainAxis·τ（替代旧指令超前 lead）
         // Kd 独立设上限：Kd 随 Kp·τ 增长会在带延迟的 roll/yaw 回路上激起极限环（日志 19:02 实测）
@@ -140,7 +126,7 @@ public static class PilotPlayerStatePatch
         LagEstimator.Sample(2, controlInputs.yaw, omega.y);
 
         Plugin.PushDebugData(controlInputs.pitch, controlInputs.roll, controlInputs.yaw);
-        Plugin.PushDebugErr(errPitchCur, errRollCur, errYawCur);
+        Plugin.PushDebugErr(errPitch, errHoriz, errHoriz);
         Plugin.PushDebugTau(LagEstimator.Tau[0], LagEstimator.Tau[1], LagEstimator.Tau[2]);
         Plugin.PushDebugCoord(controlInputs.yaw, controlInputs.pitch, controlInputs.roll, -1f);
 
