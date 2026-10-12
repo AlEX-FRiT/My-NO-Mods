@@ -68,6 +68,7 @@ public class Plugin : BaseUnityPlugin
 
     private static bool _debugAvailable;
     private static object _pitchOutStream, _rollOutStream, _yawOutStream;
+    private static object _pitchErrStream, _rollErrStream, _yawErrStream;
     private static object _pitchTauStream, _rollTauStream, _yawTauStream;
     private static object _coordPrStream, _coordYwStream;
     private static MethodInfo _debugPushMethod;
@@ -168,6 +169,9 @@ public class Plugin : BaseUnityPlugin
             var outChart = createChart.Invoke(null, new[] { flowVal, "Roll", 480f, 200f, -1f, 1f, 600, null, null });
             var yawChart = createChart.Invoke(null, new[] { flowVal, "Yaw", 480f, 200f, -1f, 1f, 600, null, null });
             var addStream = errChart.GetType().GetMethod("AddStream");
+            _pitchErrStream = addStream.Invoke(errChart, new object[] { "Err", Color.green });
+            _rollErrStream = addStream.Invoke(outChart, new object[] { "Err", Color.green });
+            _yawErrStream = addStream.Invoke(yawChart, new object[] { "Err", Color.green });
             _pitchOutStream = addStream.Invoke(errChart, new object[] { "Out", Color.yellow });
             _rollOutStream = addStream.Invoke(outChart, new object[] { "Out", Color.yellow });
             _yawOutStream = addStream.Invoke(yawChart, new object[] { "Out", Color.yellow });
@@ -196,6 +200,19 @@ public class Plugin : BaseUnityPlugin
             _debugPushMethod.Invoke(_pitchOutStream, new object[] { pO });
             _debugPushMethod.Invoke(_rollOutStream, new object[] { rO });
             _debugPushMethod.Invoke(_yawOutStream, new object[] { yO });
+        }
+        catch { _debugAvailable = false; }
+    }
+
+    internal static void PushDebugErr(float pE, float rE, float yE)
+    {
+        if (!_debugAvailable) return;
+        try
+        {
+            if (_debugPushMethod == null) _debugPushMethod = _pitchOutStream.GetType().GetMethod("Push");
+            _debugPushMethod.Invoke(_pitchErrStream, new object[] { pE });
+            _debugPushMethod.Invoke(_rollErrStream, new object[] { rE });
+            _debugPushMethod.Invoke(_yawErrStream, new object[] { yE });
         }
         catch { _debugAvailable = false; }
     }

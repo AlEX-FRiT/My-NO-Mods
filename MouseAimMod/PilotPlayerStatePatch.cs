@@ -120,6 +120,7 @@ public static class PilotPlayerStatePatch
         LagEstimator.Sample(2, controlInputs.yaw, omega.y);
 
         Plugin.PushDebugData(controlInputs.pitch, controlInputs.roll, controlInputs.yaw);
+        Plugin.PushDebugErr(errPitchCur, errRollCur, errYawCur);
         Plugin.PushDebugTau(LagEstimator.Tau[0], LagEstimator.Tau[1], LagEstimator.Tau[2]);
         Plugin.PushDebugCoord(controlInputs.yaw, controlInputs.pitch, controlInputs.roll, -1f);
 
