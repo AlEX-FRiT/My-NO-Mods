@@ -73,16 +73,22 @@ public static class PilotPlayerStatePatch
         Vector3 viewDirection = _viewFilt.normalized;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
 
-        // z<0 时分量回卷，用 ±1 兜底（大角度退化为常数）以免误差归零。
-        float horizDev = localTarget.x;
-        float vertDev  = localTarget.y;
+        // 水平误差几何建模：O 原点, B=(x,y,0) 为视线在右-上平面的投影, A=(0,r-1,0), r=|OB|。
+        //   rollErr = ∠OAB = atan2(x, y+1-r)     (AB 与垂直轴夹角)
+        //   yawErr  = |AO|·∠OAB = (1-r)·rollErr   (以 A 为心、AO 为半径的弧长)
+        // z<0 时该几何镜像失效(后方误差反小)，退化为常数 ±1。
+        float dx = localTarget.x;
+        float dy = localTarget.y;
+        float r = Mathf.Sqrt(dx * dx + dy * dy);
+        float rollErr = Mathf.Atan2(dx, dy + 1f - r);
+        float yawErr = (1f - r) * rollErr;
+        float pitchErr = -dy;
         if (localTarget.z < 0f)
         {
-            horizDev = Mathf.Sign(horizDev);
-            vertDev  = Mathf.Sign(vertDev);
+            rollErr = Mathf.Sign(rollErr);
+            yawErr = Mathf.Sign(yawErr);
+            pitchErr = -Mathf.Sign(dy);
         }
-        float errPitch = -vertDev;
-        float errHoriz = horizDev;
 
         float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
         if (Plugin.Adaptive.Value)
@@ -96,9 +102,9 @@ public static class PilotPlayerStatePatch
         float tY = Mathf.Clamp(LagEstimator.Tau[2], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
 
         Vector3 u = new Vector3(
-            ProportionalControl.Prop(errPitch, gp),
-            ProportionalControl.Prop(errHoriz, gr),
-            ProportionalControl.Prop(errHoriz, gy));
+            ProportionalControl.Prop(pitchErr, gp),
+            ProportionalControl.Prop(rollErr, gr),
+            ProportionalControl.Prop(yawErr, gy));
 
         // 速率反馈：u -= Kd·ω_corrective, Kd = FeedbackGain·GainAxis·τ（替代旧指令超前 lead）
         // Kd 独立设上限：Kd 随 Kp·τ 增长会在带延迟的 roll/yaw 回路上激起极限环（日志 19:02 实测）
@@ -126,7 +132,7 @@ public static class PilotPlayerStatePatch
         LagEstimator.Sample(2, controlInputs.yaw, omega.y);
 
         Plugin.PushDebugData(controlInputs.pitch, controlInputs.roll, controlInputs.yaw);
-        Plugin.PushDebugErr(errPitch, errHoriz, errHoriz);
+        Plugin.PushDebugErr(pitchErr, rollErr, yawErr);
         Plugin.PushDebugTau(LagEstimator.Tau[0], LagEstimator.Tau[1], LagEstimator.Tau[2]);
         Plugin.PushDebugCoord(controlInputs.yaw, controlInputs.pitch, controlInputs.roll, -1f);
 
