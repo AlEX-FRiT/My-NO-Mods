@@ -90,9 +90,9 @@ public static class PilotPlayerStatePatch
         float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
         if (Plugin.Adaptive.Value)
         {
-            gp = KpFromFit(LagEstimator.Gain[0], LagEstimator.Tau[0], LagEstimator.Theta[0]);
-            gr = KpFromFit(LagEstimator.Gain[1], LagEstimator.Tau[1], LagEstimator.Theta[1]);
-            gy = KpFromFit(LagEstimator.Gain[2], LagEstimator.Tau[2], LagEstimator.Theta[2]);
+            if (LagEstimator.Valid[0]) gp = KpFromFit(LagEstimator.Gain[0], LagEstimator.Tau[0], LagEstimator.Theta[0]);
+            if (LagEstimator.Valid[1]) gr = KpFromFit(LagEstimator.Gain[1], LagEstimator.Tau[1], LagEstimator.Theta[1]);
+            if (LagEstimator.Valid[2]) gy = KpFromFit(LagEstimator.Gain[2], LagEstimator.Tau[2], LagEstimator.Theta[2]);
         }
         float tP = Mathf.Clamp(LagEstimator.Tau[0], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
         float tR = Mathf.Clamp(LagEstimator.Tau[1], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
