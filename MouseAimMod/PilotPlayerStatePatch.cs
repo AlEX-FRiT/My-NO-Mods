@@ -75,8 +75,8 @@ public static class PilotPlayerStatePatch
 
         // 视线在右-上平面的投影 B=(x,y,0)。后半球(z<0)时沿 O->B 方向把 B 移到单位圆上得 B'(|OB'|=1,方向不变)，
         // 再代入同一套几何：
-        //   rollErr = ∠OAB·(2/π) = atan2(B'.x, B'.y+1-|OB'|)·(2/π)   (AB 与垂直轴夹角，归一)
-        //   yawErr  = (1-|OB'|)·rollErr                              (以 A 为心、AO 为半径的弧长，同归一)
+        //   rollErr = ∠OAB/π = atan2(B'.x, B'.y+1-|OB'|)/π   (AB 与垂直轴夹角；正下方 180° → ±1 满舵)
+        //   yawErr  = (1-|OB'|)·∠OAB·(2/π)                  (以 A 为心、AO 为半径的弧长，max π/2 → ±1)
         //   pitchErr = -B'.y
         float dx = localTarget.x;
         float dy = localTarget.y;
@@ -87,8 +87,9 @@ public static class PilotPlayerStatePatch
             dy /= bLen;
             bLen = 1f;
         }
-        float rollErr = Mathf.Atan2(dx, dy + 1f - bLen) * (2f / Mathf.PI);
-        float yawErr = (1f - bLen) * rollErr;
+        float rollAngle = Mathf.Atan2(dx, dy + 1f - bLen);
+        float rollErr = rollAngle / Mathf.PI;
+        float yawErr = (1f - bLen) * rollAngle * (2f / Mathf.PI);
         float pitchErr = -dy;
 
         float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
