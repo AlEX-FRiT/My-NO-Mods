@@ -73,22 +73,23 @@ public static class PilotPlayerStatePatch
         Vector3 viewDirection = _viewFilt.normalized;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
 
-        // 水平误差几何建模：O 原点, B=(x,y,0) 为视线在右-上平面的投影, A=(0,r-1,0), r=|OB|。
-        //   rollErr = ∠OAB = atan2(x, y+1-r)     (AB 与垂直轴夹角)
-        //   yawErr  = |AO|·∠OAB = (1-r)·rollErr   (以 A 为心、AO 为半径的弧长)
-        // z<0 时该几何镜像失效(后方误差反小)，退化为常数 ±1。
+        // 视线在右-上平面的投影 B=(x,y,0)。后半球(z<0)时沿 O->B 方向把 B 移到单位圆上得 B'(|OB'|=1,方向不变)，
+        // 再代入同一套几何：
+        //   rollErr = ∠OAB  = atan2(B'.x, B'.y+1-|OB'|)   (AB 与垂直轴夹角)
+        //   yawErr  = |AO|·∠OAB = (1-|OB'|)·rollErr       (以 A 为心、AO 为半径的弧长)
+        //   pitchErr = -B'.y
         float dx = localTarget.x;
         float dy = localTarget.y;
-        float r = Mathf.Sqrt(dx * dx + dy * dy);
-        float rollErr = Mathf.Atan2(dx, dy + 1f - r);
-        float yawErr = (1f - r) * rollErr;
-        float pitchErr = -dy;
-        if (localTarget.z < 0f)
+        float bLen = Mathf.Sqrt(dx * dx + dy * dy);
+        if (localTarget.z < 0f && bLen > 0f)
         {
-            rollErr = Mathf.Sign(rollErr);
-            yawErr = Mathf.Sign(yawErr);
-            pitchErr = -Mathf.Sign(dy);
+            dx /= bLen;
+            dy /= bLen;
+            bLen = 1f;
         }
+        float rollErr = Mathf.Atan2(dx, dy + 1f - bLen);
+        float yawErr = (1f - bLen) * rollErr;
+        float pitchErr = -dy;
 
         float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
         if (Plugin.Adaptive.Value)
