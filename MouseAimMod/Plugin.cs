@@ -108,7 +108,7 @@ public class Plugin : BaseUnityPlugin
         FeedbackGain = Config.Bind("Feedback", "Gain", 1f,
             new ConfigDescription("Master scale on the rate feedback: u -= Gain*Kp*tau*omega.",
                 new AcceptableValueRange<float>(0f, 3f)));
-        Adaptive = Config.Bind("Adaptive", "Enabled", false,
+        Adaptive = Config.Bind("Adaptive", "Enabled", true,
             "Derive Kp/Kd online from the identified (K,tau,theta) instead of the fixed Proportional gains.");
         AdaptiveWc = Config.Bind("Adaptive", "Wc", 0.4f,
             new ConfigDescription("Kp = Wc / (K * max(theta, ThetaMin)).",
