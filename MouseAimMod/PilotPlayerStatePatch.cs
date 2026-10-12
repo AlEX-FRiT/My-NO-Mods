@@ -126,9 +126,13 @@ public static class PilotPlayerStatePatch
         float rollOut  = Mathf.Clamp(u.y - kdR * (-omega.z), -1f, 1f);
         float yawOut   = Mathf.Clamp(u.z - kdY * omega.y,    -1f, 1f);
 
-        if (Plugin.AimPitch.Value && controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
-        if (Plugin.AimRoll.Value  && controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
-        if (Plugin.AimYaw.Value   && controlInputs.yaw   == 0f) controlInputs.yaw   = yawOut;
+        bool anyManualInput = controlInputs.pitch != 0f || controlInputs.roll != 0f || controlInputs.yaw != 0f;
+        if (!anyManualInput)
+        {
+            if (Plugin.AimPitch.Value) controlInputs.pitch = pitchOut;
+            if (Plugin.AimRoll.Value)  controlInputs.roll  = rollOut;
+            if (Plugin.AimYaw.Value)   controlInputs.yaw   = yawOut;
+        }
 
         LagEstimator.NoteAircraft(aircraft.GetInstanceID());
         LagEstimator.Sample(0, controlInputs.pitch, omega.x);
