@@ -165,9 +165,9 @@ public class Plugin : BaseUnityPlugin
             var chartTypeEnum = Type.GetType("DebugGraphMod.ChartType, DebugGraphMod");
             var flowVal = Enum.Parse(chartTypeEnum, "Flow");
             var createChart = regType.GetMethod("CreateChart");
-            var errChart = createChart.Invoke(null, new[] { flowVal, "Pitch", 480f, 200f, -1f, 1f, 600, null, null });
-            var outChart = createChart.Invoke(null, new[] { flowVal, "Roll", 480f, 200f, -1f, 1f, 600, null, null });
-            var yawChart = createChart.Invoke(null, new[] { flowVal, "Yaw", 480f, 200f, -1f, 1f, 600, null, null });
+            var errChart = createChart.Invoke(null, new[] { flowVal, "Pitch", 480f, 200f, -1f, 1f, 1800, null, null });
+            var outChart = createChart.Invoke(null, new[] { flowVal, "Roll", 480f, 200f, -1f, 1f, 1800, null, null });
+            var yawChart = createChart.Invoke(null, new[] { flowVal, "Yaw", 480f, 200f, -1f, 1f, 1800, null, null });
             var addStream = errChart.GetType().GetMethod("AddStream");
             _pitchErrStream = addStream.Invoke(errChart, new object[] { "Err", Color.green });
             _rollErrStream = addStream.Invoke(outChart, new object[] { "Err", Color.green });
