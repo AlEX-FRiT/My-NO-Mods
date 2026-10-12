@@ -142,7 +142,9 @@ internal static class LagEstimator
         Tau[a] = Mathf.Clamp(Tau[a] * 0.6f + bestTau * 0.4f, 0f, 2f);
         Tau2[a] = Mathf.Clamp(Tau2[a] * 0.6f + bestTau2 * 0.4f, 0f, 2f);
         Theta[a] = Mathf.Clamp(Theta[a] * 0.6f + bestLag * _dt * 0.4f, 0f, 2f);
-        Gain[a] = Mathf.Clamp(Gain[a] * 0.6f + bestDc * 0.4f, 0.02f, 50f);
+        float gSigned = Gain[a] * 0.6f + bestDc * 0.4f;
+        float gMag = Mathf.Clamp(Mathf.Abs(gSigned), 0.02f, 50f);
+        Gain[a] = gSigned < 0f ? -gMag : gMag;
         Valid[a] = true;
     }
 

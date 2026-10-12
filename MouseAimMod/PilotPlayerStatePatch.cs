@@ -115,11 +115,16 @@ public static class PilotPlayerStatePatch
         Vector3 u = wA * uA + wB * uB;
 
         // 速率反馈：u -= Kd·ω_corrective, Kd = FeedbackGain·GainAxis·τ（替代旧指令超前 lead）
+        // Kd 独立设上限：Kd 随 Kp·τ 增长会在带延迟的 roll/yaw 回路上激起极限环（日志 19:02 实测）
         Vector3 omega = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
         float fg = Plugin.FeedbackGain.Value;
-        float pitchOut = Mathf.Clamp(u.x - fg * gp * tP * omega.x,    -1f, 1f);
-        float rollOut  = Mathf.Clamp(u.y - fg * gr * tR * (-omega.z), -1f, 1f);
-        float yawOut   = Mathf.Clamp(u.z - fg * gy * tY * omega.y,    -1f, 1f);
+        float kdMax = Plugin.AdaptiveKdMax.Value;
+        float kdP = Mathf.Min(fg * gp * tP, kdMax);
+        float kdR = Mathf.Min(fg * gr * tR, kdMax);
+        float kdY = Mathf.Min(fg * gy * tY, kdMax);
+        float pitchOut = Mathf.Clamp(u.x - kdP * omega.x,    -1f, 1f);
+        float rollOut  = Mathf.Clamp(u.y - kdR * (-omega.z), -1f, 1f);
+        float yawOut   = Mathf.Clamp(u.z - kdY * omega.y,    -1f, 1f);
 
         if (Plugin.AimPitch.Value && controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (Plugin.AimRoll.Value  && controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
@@ -146,7 +151,7 @@ public static class PilotPlayerStatePatch
     private static float KpFromFit(float K, float tau, float theta)
     {
         float th = Mathf.Max(theta, Plugin.AdaptiveThetaMin.Value);
-        float kk = Mathf.Max(K, 0.05f);
+        float kk = Mathf.Max(Mathf.Abs(K), 0.05f);
         return Mathf.Clamp(Plugin.AdaptiveWc.Value / (kk * th), Plugin.AdaptiveKpMin.Value, Plugin.AdaptiveKpMax.Value);
     }
 
