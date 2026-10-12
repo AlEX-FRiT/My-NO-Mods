@@ -87,14 +87,25 @@ public static class PilotPlayerStatePatch
         Vector3 errA = new Vector3(errPitchCur, errRollLevel, errYawCur);
         Vector3 errB = new Vector3(errPitchCur * Mathf.Pow(1f - Mathf.Abs(errRollCur), wN), errRollCur, 0f);
 
+        float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
+        if (Plugin.Adaptive.Value)
+        {
+            gp = KpFromFit(LagEstimator.Gain[0], LagEstimator.Tau[0], LagEstimator.Theta[0]);
+            gr = KpFromFit(LagEstimator.Gain[1], LagEstimator.Tau[1], LagEstimator.Theta[1]);
+            gy = KpFromFit(LagEstimator.Gain[2], LagEstimator.Tau[2], LagEstimator.Theta[2]);
+        }
+        float tP = Mathf.Clamp(LagEstimator.Tau[0], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
+        float tR = Mathf.Clamp(LagEstimator.Tau[1], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
+        float tY = Mathf.Clamp(LagEstimator.Tau[2], Plugin.AdaptiveTauMin.Value, Plugin.AdaptiveTauMax.Value);
+
         Vector3 uA = new Vector3(
-            ProportionalControl.Prop(errA.x, Plugin.PropGainPitch.Value),
-            ProportionalControl.Prop(errA.y, Plugin.PropGainRoll.Value),
-            ProportionalControl.Prop(errA.z, Plugin.PropGainYaw.Value));
+            ProportionalControl.Prop(errA.x, gp),
+            ProportionalControl.Prop(errA.y, gr),
+            ProportionalControl.Prop(errA.z, gy));
         Vector3 uB = new Vector3(
-            ProportionalControl.Prop(errB.x, Plugin.PropGainPitch.Value),
-            ProportionalControl.Prop(errB.y, Plugin.PropGainRoll.Value),
-            ProportionalControl.Prop(errB.z, Plugin.PropGainYaw.Value));
+            ProportionalControl.Prop(errB.x, gp),
+            ProportionalControl.Prop(errB.y, gr),
+            ProportionalControl.Prop(errB.z, gy));
 
         float z = Mathf.Clamp01(1f - localTarget.z);
         float wB = Mathf.Clamp01((z - Plugin.ModeBlendX.Value) / Mathf.Max(1e-4f, Plugin.ModeBlendY.Value - Plugin.ModeBlendX.Value));
@@ -106,9 +117,9 @@ public static class PilotPlayerStatePatch
         // 速率反馈：u -= Kd·ω_corrective, Kd = FeedbackGain·GainAxis·τ（替代旧指令超前 lead）
         Vector3 omega = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
         float fg = Plugin.FeedbackGain.Value;
-        float pitchOut = Mathf.Clamp(u.x - fg * Plugin.PropGainPitch.Value * LagEstimator.Tau[0] * omega.x,    -1f, 1f);
-        float rollOut  = Mathf.Clamp(u.y - fg * Plugin.PropGainRoll.Value  * LagEstimator.Tau[1] * (-omega.z), -1f, 1f);
-        float yawOut   = Mathf.Clamp(u.z - fg * Plugin.PropGainYaw.Value   * LagEstimator.Tau[2] * omega.y,    -1f, 1f);
+        float pitchOut = Mathf.Clamp(u.x - fg * gp * tP * omega.x,    -1f, 1f);
+        float rollOut  = Mathf.Clamp(u.y - fg * gr * tR * (-omega.z), -1f, 1f);
+        float yawOut   = Mathf.Clamp(u.z - fg * gy * tY * omega.y,    -1f, 1f);
 
         if (Plugin.AimPitch.Value && controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
         if (Plugin.AimRoll.Value  && controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
@@ -130,6 +141,13 @@ public static class PilotPlayerStatePatch
             aircraft.flightAssist = false;
             _stabilityKilled = true;
         }
+    }
+
+    private static float KpFromFit(float K, float tau, float theta)
+    {
+        float th = Mathf.Max(theta, Plugin.AdaptiveThetaMin.Value);
+        float kk = Mathf.Max(K, 0.05f);
+        return Mathf.Clamp(Plugin.AdaptiveWc.Value / (kk * th), Plugin.AdaptiveKpMin.Value, Plugin.AdaptiveKpMax.Value);
     }
 
     [HarmonyPatch(typeof(Aircraft), "FilterInputs")]

@@ -47,6 +47,13 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> PropGainRoll;
 
     internal static ConfigEntry<float> FeedbackGain;
+    internal static ConfigEntry<bool> Adaptive;
+    internal static ConfigEntry<float> AdaptiveWc;
+    internal static ConfigEntry<float> AdaptiveKpMin;
+    internal static ConfigEntry<float> AdaptiveKpMax;
+    internal static ConfigEntry<float> AdaptiveTauMin;
+    internal static ConfigEntry<float> AdaptiveTauMax;
+    internal static ConfigEntry<float> AdaptiveThetaMin;
     internal static ConfigEntry<float> TargetFilterTau;
     internal static ConfigEntry<int> LagIntervalFrames;
     internal static ConfigEntry<int> LagRingSize;
@@ -101,6 +108,21 @@ public class Plugin : BaseUnityPlugin
         FeedbackGain = Config.Bind("Feedback", "Gain", 1f,
             new ConfigDescription("Master scale on the rate feedback: u -= Gain*Kp*tau*omega.",
                 new AcceptableValueRange<float>(0f, 3f)));
+        Adaptive = Config.Bind("Adaptive", "Enabled", false,
+            "Derive Kp/Kd online from the identified (K,tau,theta) instead of the fixed Proportional gains.");
+        AdaptiveWc = Config.Bind("Adaptive", "Wc", 0.4f,
+            new ConfigDescription("Kp = Wc / (K * max(theta, ThetaMin)).",
+                new AcceptableValueRange<float>(0.05f, 2f)));
+        AdaptiveKpMin = Config.Bind("Adaptive", "KpMin", 0.2f,
+            new ConfigDescription("Kp clamp min.", new AcceptableValueRange<float>(0.01f, 20f)));
+        AdaptiveKpMax = Config.Bind("Adaptive", "KpMax", 20f,
+            new ConfigDescription("Kp clamp max.", new AcceptableValueRange<float>(0.01f, 100f)));
+        AdaptiveTauMin = Config.Bind("Adaptive", "TauMin", 0.05f,
+            new ConfigDescription("tau clamp min for Kd = Kp*tau.", new AcceptableValueRange<float>(0.01f, 1f)));
+        AdaptiveTauMax = Config.Bind("Adaptive", "TauMax", 1f,
+            new ConfigDescription("tau clamp max.", new AcceptableValueRange<float>(0.01f, 3f)));
+        AdaptiveThetaMin = Config.Bind("Adaptive", "ThetaMin", 0.02f,
+            new ConfigDescription("theta floor (stops Kp blow-up as theta -> 0).", new AcceptableValueRange<float>(0.005f, 0.5f)));
         TargetFilterTau = Config.Bind("Filter", "TargetTau", 0.05f,
             new ConfigDescription("Low-pass time constant on the input target direction (0 = off).",
                 new AcceptableValueRange<float>(0f, 1f)));

@@ -25,6 +25,7 @@ internal static class LagEstimator
     public static readonly float[] Tau = new float[AxisCount];
     public static readonly float[] Tau2 = new float[AxisCount];
     public static readonly float[] Theta = new float[AxisCount];
+    public static readonly float[] Gain = new float[AxisCount];
     public static readonly float[] R2 = new float[AxisCount];
     public static readonly bool[] Valid = new bool[AxisCount];
     public static readonly bool[] Gated = new bool[AxisCount];
@@ -46,7 +47,7 @@ internal static class LagEstimator
     public static void Reset()
     {
         _head = 0; _count = 0; _frames = 0;
-        for (int a = 0; a < AxisCount; a++) { Tau[a] = 0f; Tau2[a] = 0f; Theta[a] = 0f; R2[a] = 0f; Valid[a] = false; Gated[a] = false; }
+        for (int a = 0; a < AxisCount; a++) { Tau[a] = 0f; Tau2[a] = 0f; Theta[a] = 0f; Gain[a] = 1f; R2[a] = 0f; Valid[a] = false; Gated[a] = false; }
     }
 
     public static void NoteAircraft(int id)
@@ -121,14 +122,17 @@ internal static class LagEstimator
         int maxLag = Mathf.Min(N / 4, 60);
         int ph = Mathf.Clamp(Plugin.LagPredHorizon.Value, 2, Mathf.Max(2, N / 2));
         int bestLag = -1; float bestR2 = float.NegativeInfinity;
-        float bestTau = 0f, bestTau2 = 0f;
+        float bestTau = 0f, bestTau2 = 0f, bestDc = 1f;
         var c = new double[order + 1];
         for (int lag = 0; lag <= maxLag; lag++)
         {
             if (!FitArx(u, y, N, lag, order, c)) continue;
             if (!Poles(order, c, MaxPole, out float tau, out float tau2)) continue;
             float r2 = SimR2(u, y, N, lag, order, c, ph);
-            if (r2 > bestR2) { bestR2 = r2; bestLag = lag; bestTau = tau; bestTau2 = tau2; }
+            double sumA = 0.0;
+            for (int q = 0; q < order; q++) sumA += c[q];
+            float dc = (1.0 - sumA) != 0.0 ? (float)(c[order] / (1.0 - sumA)) : 1f;
+            if (r2 > bestR2) { bestR2 = r2; bestLag = lag; bestTau = tau; bestTau2 = tau2; bestDc = dc; }
         }
         if (bestLag < 0) { Valid[a] = false; Gated[a] = true; R2[a] = 0f; return; }
 
@@ -138,6 +142,7 @@ internal static class LagEstimator
         Tau[a] = Mathf.Clamp(Tau[a] * 0.6f + bestTau * 0.4f, 0f, 2f);
         Tau2[a] = Mathf.Clamp(Tau2[a] * 0.6f + bestTau2 * 0.4f, 0f, 2f);
         Theta[a] = Mathf.Clamp(Theta[a] * 0.6f + bestLag * _dt * 0.4f, 0f, 2f);
+        Gain[a] = Mathf.Clamp(Gain[a] * 0.6f + bestDc * 0.4f, 0.02f, 50f);
         Valid[a] = true;
     }
 
