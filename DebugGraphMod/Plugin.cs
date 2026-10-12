@@ -21,6 +21,7 @@ public class Plugin : BaseUnityPlugin
 
     private void Awake()
     {
+        Config.SaveOnConfigSet = false;
         Enabled = Config.Bind("General", "Enabled", true, "Show debug graphs");
         SaveData = Config.Bind("General", "SaveData", false, "Toggle ON to save all chart data to file");
         DeleteData = Config.Bind("General", "DeleteData", false, "Toggle ON to delete all saved CSV files");
@@ -69,7 +70,7 @@ public class Plugin : BaseUnityPlugin
 
         foreach (var chart in GraphRegistry.Charts)
         {
-            string title = $"{chart.Name} [{chart.YMin},{chart.YMax}]";
+            string title = chart.Name;
             chart.Position = GUI.Window(chart.Id, chart.Position, chart.DrawWindow, title, _windowStyle);
         }
     }

@@ -28,9 +28,14 @@ public static class GraphRegistry
             BufferSize = bufferSize
         };
 
-        float totalH = height + 40f;
-        float x = Screen.width - width - 20f;
-        float y = Screen.height - totalH * (chartCount + 1) - 20f;
+        float totalH = height + 80f;
+        const float margin = 20f;
+        const float gapX = 20f;
+        int rowsPerCol = Mathf.Max(1, Mathf.FloorToInt((Screen.height - 2f * margin) / totalH));
+        int col = chartCount / rowsPerCol;
+        int row = chartCount % rowsPerCol;
+        float x = Screen.width - width - margin - col * (width + gapX);
+        float y = Screen.height - totalH * (row + 1) - margin;
         chart.Position = new Rect(x, y, width, totalH);
         chartCount++;
 

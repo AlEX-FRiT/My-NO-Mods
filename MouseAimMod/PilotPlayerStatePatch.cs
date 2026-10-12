@@ -8,6 +8,11 @@ public static class PilotPlayerStatePatch
 {
     private static bool _stabilityKilled;
     private static bool _stabilityOrig;
+    private static float _prevMixPitch;
+    private static float _prevMixRoll;
+    private static float _prevMixYaw;
+    private static Vector3 _viewFilt;
+    private static bool _filtInit;
 
     [HarmonyPatch("PlayerControls")]
     [HarmonyPostfix]
@@ -58,22 +63,69 @@ public static class PilotPlayerStatePatch
         if (!aimActive) return;
         if (Camera.main == null) return;
 
-        // 目标输入：视线方向在机体坐标系下的目标方位向量
-        Vector3 viewDirection = Camera.main.transform.forward;
+        // 目标输入：视线方向先低通滤波（世界系），再转机体坐标系
+        Vector3 viewRaw = Camera.main.transform.forward;
+        float fTau = Plugin.TargetFilterTau.Value;
+        if (fTau > 0.001f)
+        {
+            float fdt = Time.fixedDeltaTime > 1e-5f ? Time.fixedDeltaTime : 0.02f;
+            if (!_filtInit) { _viewFilt = viewRaw; _filtInit = true; }
+            _viewFilt += (fdt / (fTau + fdt)) * (viewRaw - _viewFilt);
+        }
+        else { _viewFilt = viewRaw; _filtInit = false; }
+        Vector3 viewDirection = _viewFilt.normalized;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
-        Vector3 localVelocityDir = aircraft.transform.InverseTransformDirection(aircraft.rb.velocity.normalized);
 
-        Vector3 control = ProportionalControl.ComputeControlFromTarget(localTarget, localVelocityDir);
-        float pitchOut = control.x;
-        float yawOut   = control.y;
-        float rollOut  = control.z;
+        // 误差提取（符号与已验证的现行律一致）
+        float horizDev = localTarget.x;
+        float vertDev  = localTarget.y;
+        if (localTarget.z < 0f) vertDev = Mathf.Sign(vertDev);
+        float errPitchCur  = -vertDev;
+        float errYawCur    = horizDev;
+        float errRollCur   = horizDev;
+        float errRollLevel = Mathf.Clamp(aircraft.transform.right.y, -1f, 1f);
 
-        Plugin.PushDebugData(-localTarget.y, localTarget.x, localTarget.x, pitchOut, rollOut, yawOut);
-        Plugin.PushDebugCoord(yawOut, pitchOut, rollOut, -1f);
+        // A：yaw 管水平 / pitch 管垂直 / roll 改平 ; B：roll 管水平 / pitch 按 roll 权重压制 / yaw=0
+        float wN = Mathf.Max(1f, Plugin.ModePitchN.Value);
+        Vector3 errA = new Vector3(errPitchCur, errRollLevel, errYawCur);
+        Vector3 errB = new Vector3(errPitchCur * Mathf.Pow(1f - Mathf.Abs(errRollCur), wN), errRollCur, 0f);
 
-        if (controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
-        if (controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
-        if (controlInputs.yaw   == 0f) controlInputs.yaw   = yawOut;
+        Vector3 uA = new Vector3(
+            ProportionalControl.Prop(errA.x, Plugin.PropGainPitch.Value),
+            ProportionalControl.Prop(errA.y, Plugin.PropGainRoll.Value),
+            ProportionalControl.Prop(errA.z, Plugin.PropGainYaw.Value));
+        Vector3 uB = new Vector3(
+            ProportionalControl.Prop(errB.x, Plugin.PropGainPitch.Value),
+            ProportionalControl.Prop(errB.y, Plugin.PropGainRoll.Value),
+            ProportionalControl.Prop(errB.z, Plugin.PropGainYaw.Value));
+
+        float z = Mathf.Clamp01(1f - localTarget.z);
+        float wB = Mathf.Clamp01((z - Plugin.ModeBlendX.Value) / Mathf.Max(1e-4f, Plugin.ModeBlendY.Value - Plugin.ModeBlendX.Value));
+        float wA = 1f - wB;
+        if (Plugin.ModeForce.Value == AimMode.A) { wA = 1f; wB = 0f; }
+        else if (Plugin.ModeForce.Value == AimMode.B) { wA = 0f; wB = 1f; }
+        Vector3 u = wA * uA + wB * uB;
+
+        // lead 后级：每轴一次，只对"纯 u"求导（prev 存超前前的 u）
+        float dt = Time.fixedDeltaTime > 1e-5f ? Time.fixedDeltaTime : 0.02f;
+        float lead = Plugin.LeadEnabled.Value ? Plugin.LeadScale.Value : 0f;
+        float pitchOut = Lead(u.x, lead, LagEstimator.Tau[0], dt, ref _prevMixPitch);
+        float rollOut  = Lead(u.y, lead, LagEstimator.Tau[1], dt, ref _prevMixRoll);
+        float yawOut   = Lead(u.z, lead, LagEstimator.Tau[2], dt, ref _prevMixYaw);
+
+        if (Plugin.AimPitch.Value && controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
+        if (Plugin.AimRoll.Value  && controlInputs.roll  == 0f) controlInputs.roll  = rollOut;
+        if (Plugin.AimYaw.Value   && controlInputs.yaw   == 0f) controlInputs.yaw   = yawOut;
+
+        Vector3 omega = aircraft.transform.InverseTransformDirection(aircraft.rb.angularVelocity);
+        LagEstimator.NoteAircraft(aircraft.GetInstanceID());
+        LagEstimator.Sample(0, controlInputs.pitch, omega.x);
+        LagEstimator.Sample(1, controlInputs.roll, omega.z);
+        LagEstimator.Sample(2, controlInputs.yaw, omega.y);
+
+        Plugin.PushDebugData(controlInputs.pitch, controlInputs.roll, controlInputs.yaw);
+        Plugin.PushDebugTau(LagEstimator.Tau[0], LagEstimator.Tau[1], LagEstimator.Tau[2]);
+        Plugin.PushDebugCoord(controlInputs.yaw, controlInputs.pitch, controlInputs.roll, -1f);
 
         if (keyboardPitch && Plugin.StabilityKbEnabled.Value && !_stabilityKilled)
         {
@@ -81,6 +133,14 @@ public static class PilotPlayerStatePatch
             aircraft.flightAssist = false;
             _stabilityKilled = true;
         }
+    }
+
+    private static float Lead(float u, float scale, float tau, float dt, ref float prev)
+    {
+        float o = u;
+        if (scale > 0f && tau > 0.02f) o = Mathf.Clamp(u + scale * tau * (u - prev) / dt, -1f, 1f);
+        prev = u;
+        return o;
     }
 
     [HarmonyPatch(typeof(Aircraft), "FilterInputs")]
@@ -92,32 +152,9 @@ public static class PilotPlayerStatePatch
 }
 
 /// <summary>
-/// 简易比例映射：将机体坐标系下的目标方位转化为控制量（输入目标，输出控制量）。
+/// 共享的纯比例映射：u = clamp(err * gain, -1, 1)。三轴算法相同。
 /// </summary>
 public static class ProportionalControl
 {
-    /// <param name="localVelocityDir">归一化后的速度矢量在机体坐标系下的表示（各分量与 localTarget 含义一致）。</param>
-    /// <returns>控制量 (pitch, yaw, roll)，各分量已夹取到 [-1, 1]。</returns>
-    public static Vector3 ComputeControlFromTarget(Vector3 localTarget, Vector3 localVelocityDir)
-    {
-        float horizDev = localTarget.x;
-        float vertDev  = localTarget.y;
-        // 目标位于机身后方时，垂直偏差方向取反
-        if (localTarget.z < 0f) vertDev = Mathf.Sign(vertDev);
-
-        // u = Kp * e
-        float pitch = Mathf.Clamp(-vertDev * Plugin.PropGainPitch.Value, -1f, 1f);
-        float yaw   = Mathf.Clamp( horizDev * Plugin.PropGainYaw.Value,   -1f, 1f);
-
-        // roll = X·wX - Y·wY，X/Y 为目标/速度在水平面内偏离机头轴线的归一化分量（右为正）
-        float t = Mathf.Max(Plugin.RollBlend.Value, 0.0001f);
-        float X = Mathf.Clamp(horizDev, -1f, 1f);
-        float Y = Mathf.Clamp(localVelocityDir.x, -1f, 1f);
-        float ax = Mathf.Abs(X), ay = Mathf.Abs(Y);
-        float wX = ax >= t ? 1f : ax / t;
-        float wY = ay >= t ? 0f : 1f - ay / t;
-        float roll = Mathf.Clamp(X * wX - Y * wY, -1f, 1f);
-
-        return new Vector3(pitch, yaw, roll);
-    }
+    public static float Prop(float err, float gain) => Mathf.Clamp(err * gain, -1f, 1f);
 }

@@ -12,6 +12,7 @@ using HarmonyLib;
 namespace MouseAimMod;
 
 public enum PresetSlot { Slot1, Slot2, Slot3, Slot4, Slot5 }
+public enum AimMode { Mixed, A, B }
 
 [BepInPlugin("nuclearoption.mouseaimmod", "Mouse Aim Mod", "2.0.0")]
 [BepInProcess("NuclearOption.exe")]
@@ -43,16 +44,32 @@ public class Plugin : BaseUnityPlugin
     // 简易比例映射增益：u = Kp * e（e 为目标方位在机体坐标系下的分量）
     internal static ConfigEntry<float> PropGainPitch;
     internal static ConfigEntry<float> PropGainYaw;
-    internal static ConfigEntry<float> RollBlend;
+    internal static ConfigEntry<float> PropGainRoll;
+
+    internal static ConfigEntry<bool> LeadEnabled;
+    internal static ConfigEntry<float> LeadScale;
+    internal static ConfigEntry<float> TargetFilterTau;
+    internal static ConfigEntry<int> LagIntervalFrames;
+    internal static ConfigEntry<int> LagRingSize;
+    internal static ConfigEntry<int> LagPredHorizon;
+    internal static ConfigEntry<int> LagSmoothWindow;
+    internal static ConfigEntry<bool> LagAdaptiveSmooth;
+    internal static ConfigEntry<float> LagAdaptiveK;
+    internal static ConfigEntry<float> ModeBlendX;
+    internal static ConfigEntry<float> ModeBlendY;
+    internal static ConfigEntry<float> ModePitchN;
+    internal static ConfigEntry<AimMode> ModeForce;
+    internal static ConfigEntry<bool> AimPitch;
+    internal static ConfigEntry<bool> AimRoll;
+    internal static ConfigEntry<bool> AimYaw;
 
     internal static ConfigEntry<PresetSlot> ActivePreset;
     internal static ConfigEntry<bool> SavePreset;
     internal static ConfigEntry<bool> LoadPreset;
 
     private static bool _debugAvailable;
-    private static object _pitchErrStream, _pitchOutStream;
-    private static object _rollErrStream, _rollOutStream;
-    private static object _yawErrStream, _yawOutStream;
+    private static object _pitchOutStream, _rollOutStream, _yawOutStream;
+    private static object _pitchTauStream, _rollTauStream, _yawTauStream;
     private static object _coordPrStream, _coordYwStream;
     private static MethodInfo _debugPushMethod;
     private static MethodInfo _debugPushXyMethod;
@@ -77,9 +94,47 @@ public class Plugin : BaseUnityPlugin
         PropGainYaw = Config.Bind("Proportional", "GainYaw", 2f,
             new ConfigDescription("Proportional gain for yaw: yaw = Kp * sin(horizontal deviation)",
                 new AcceptableValueRange<float>(0f, 20f)));
-        RollBlend = Config.Bind("Proportional", "RollBlend", 0.5f,
-            new ConfigDescription("Roll target/velocity blend ratio; |X|,|Y| within this band mix proportionally",
-                new AcceptableValueRange<float>(0.001f, 1f)));
+        PropGainRoll = Config.Bind("Proportional", "GainRoll", 1f,
+            new ConfigDescription("Proportional gain for roll: roll = Kp * horizontal deviation",
+                new AcceptableValueRange<float>(0f, 20f)));
+
+        LeadEnabled = Config.Bind("Lead", "Enabled", true, "Compensate the identified plant lag with a lead term on pitch/roll.");
+        LeadScale = Config.Bind("Lead", "Scale", 1f,
+            new ConfigDescription("Multiplier on the identified tau in the lead term.",
+                new AcceptableValueRange<float>(0f, 3f)));
+        TargetFilterTau = Config.Bind("Filter", "TargetTau", 0.05f,
+            new ConfigDescription("Low-pass time constant on the input target direction (0 = off).",
+                new AcceptableValueRange<float>(0f, 1f)));
+        LagIntervalFrames = Config.Bind("Lag", "IntervalFrames", 30,
+            new ConfigDescription("Re-estimate the lag every N physics frames.",
+                new AcceptableValueRange<int>(1, 300)));
+        LagRingSize = Config.Bind("Lag", "RingSize", 256,
+            new ConfigDescription("Identification window length, samples per axis (takes effect on reload).",
+                new AcceptableValueRange<int>(32, 4096)));
+        LagPredHorizon = Config.Bind("Lag", "PredHorizon", 20,
+            new ConfigDescription("H-step simulation horizon (frames) for the quality gate.",
+                new AcceptableValueRange<int>(2, 200)));
+        LagSmoothWindow = Config.Bind("Lag", "SmoothWindow", 5,
+            new ConfigDescription("Moving-average window on u,y before identification (odd; removes noise bias).",
+                new AcceptableValueRange<int>(1, 15)));
+        LagAdaptiveSmooth = Config.Bind("Lag", "AdaptiveSmooth", true,
+            "Pick the smoothing window per axis from the last tau (fast axes -> smaller window).");
+        LagAdaptiveK = Config.Bind("Lag", "AdaptiveK", 0.3f,
+            new ConfigDescription("Adaptive smoothing: window ~= AdaptiveK * tau / dt (clamped 3..13).",
+                new AcceptableValueRange<float>(0.05f, 1f)));
+        ModeBlendX = Config.Bind("Mode", "BlendX", 0.3f,
+            new ConfigDescription("z <= BlendX -> pure A (yaw+pitch).",
+                new AcceptableValueRange<float>(0f, 1f)));
+        ModeBlendY = Config.Bind("Mode", "BlendY", 0.7f,
+            new ConfigDescription("z >= BlendY -> pure B (roll+pitch).",
+                new AcceptableValueRange<float>(0f, 1f)));
+        ModePitchN = Config.Bind("Mode", "PitchWeightN", 2f,
+            new ConfigDescription("Mode B pitch weight (1-|rollErr|)^n exponent.",
+                new AcceptableValueRange<float>(0.1f, 10f)));
+        ModeForce = Config.Bind("Mode", "ForceMode", AimMode.Mixed, "Force a single mode (Mixed/A/B).");
+        AimPitch = Config.Bind("Control", "AimPitch", true, "Enable the mouse-aim output on the pitch axis (off = suppress assist pitch).");
+        AimRoll = Config.Bind("Control", "AimRoll", true, "Enable the mouse-aim output on the roll axis (off = suppress assist roll).");
+        AimYaw = Config.Bind("Control", "AimYaw", true, "Enable the mouse-aim output on the yaw axis (off = suppress assist yaw).");
 
         ActivePreset = Config.Bind("Presets", "ActivePreset", PresetSlot.Slot1, "Select preset slot for save/load.");
         SavePreset = Config.Bind("Presets", "SavePreset", false, "Toggle ON to save current config to active preset.");
@@ -115,12 +170,12 @@ public class Plugin : BaseUnityPlugin
             var outChart = createChart.Invoke(null, new[] { flowVal, "Roll", 480f, 200f, -1f, 1f, 600, null, null });
             var yawChart = createChart.Invoke(null, new[] { flowVal, "Yaw", 480f, 200f, -1f, 1f, 600, null, null });
             var addStream = errChart.GetType().GetMethod("AddStream");
-            _pitchErrStream = addStream.Invoke(errChart, new object[] { "Err", Color.green });
             _pitchOutStream = addStream.Invoke(errChart, new object[] { "Out", Color.yellow });
-            _rollErrStream = addStream.Invoke(outChart, new object[] { "Err", Color.green });
             _rollOutStream = addStream.Invoke(outChart, new object[] { "Out", Color.yellow });
-            _yawErrStream = addStream.Invoke(yawChart, new object[] { "Err", Color.green });
             _yawOutStream = addStream.Invoke(yawChart, new object[] { "Out", Color.yellow });
+            _pitchTauStream = addStream.Invoke(errChart, new object[] { "Tau", Color.cyan });
+            _rollTauStream = addStream.Invoke(outChart, new object[] { "Tau", Color.cyan });
+            _yawTauStream = addStream.Invoke(yawChart, new object[] { "Tau", Color.cyan });
 
             var coordVal = Enum.Parse(chartTypeEnum, "Coordinate");
             var xyChart = createChart.Invoke(null, new object[] { coordVal, "Stick XY", 480f, 200f, -1f, 1f, 5, -1f, 1f });
@@ -134,18 +189,28 @@ public class Plugin : BaseUnityPlugin
         catch (Exception ex) { Logger.LogInfo($"DebugGraphMod not available: {ex.Message}"); }
     }
 
-    internal static void PushDebugData(float pE, float rE, float yE, float pO, float rO, float yO)
+    internal static void PushDebugData(float pO, float rO, float yO)
     {
         if (!_debugAvailable) return;
         try
         {
-            if (_debugPushMethod == null) _debugPushMethod = _pitchErrStream.GetType().GetMethod("Push");
-            _debugPushMethod.Invoke(_pitchErrStream, new object[] { pE });
+            if (_debugPushMethod == null) _debugPushMethod = _pitchOutStream.GetType().GetMethod("Push");
             _debugPushMethod.Invoke(_pitchOutStream, new object[] { pO });
-            _debugPushMethod.Invoke(_rollErrStream, new object[] { rE });
             _debugPushMethod.Invoke(_rollOutStream, new object[] { rO });
-            _debugPushMethod.Invoke(_yawErrStream, new object[] { yE });
             _debugPushMethod.Invoke(_yawOutStream, new object[] { yO });
+        }
+        catch { _debugAvailable = false; }
+    }
+
+    internal static void PushDebugTau(float pTau, float rTau, float yTau)
+    {
+        if (!_debugAvailable) return;
+        try
+        {
+            if (_debugPushMethod == null) _debugPushMethod = _pitchOutStream.GetType().GetMethod("Push");
+            _debugPushMethod.Invoke(_pitchTauStream, new object[] { pTau });
+            _debugPushMethod.Invoke(_rollTauStream, new object[] { rTau });
+            _debugPushMethod.Invoke(_yawTauStream, new object[] { yTau });
         }
         catch { _debugAvailable = false; }
     }

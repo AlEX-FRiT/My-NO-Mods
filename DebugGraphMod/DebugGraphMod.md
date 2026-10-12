@@ -139,11 +139,14 @@ Y = chartRect.y + chartRect.height × (1 − (y − yMin) / (yMax − yMin))
 
 ### 初始位置
 
-图表默认放置在屏幕右下角，多个图表垂直堆叠：
+图表从**右下角**开始，**自下而上**排列；一列放不下时，在左边开新的一列继续自下而上，如此往复向左：
 
 ```
-x = Screen.width  − width  − 20
-y = Screen.height − (height + 40) × (n + 1) − 20
+rowsPerCol = floor((Screen.height − 2×20) / (height + 40))
+col = n / rowsPerCol
+row = n % rowsPerCol
+x = Screen.width  − width  − 20 − col × (width + 20)
+y = Screen.height − (height + 40) × (row + 1) − 20
 ```
 
 用户拖动后位置保留在 `Chart.Position` 中，`GUI.Window` 返回更新后的 Rect。

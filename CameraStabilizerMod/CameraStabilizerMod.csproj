@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
-    <Import Project="GameDir.targets" />
+    <PropertyGroup Condition="'$(GameDir)' == ''">
+        <GameDir>$(NUCLEAR_OPTION_PATH)</GameDir>
+    </PropertyGroup>
     
     <PropertyGroup>
         <TargetFramework>net472</TargetFramework>

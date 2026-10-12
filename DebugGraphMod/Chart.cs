@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEngine;
 
 namespace DebugGraphMod;
@@ -12,6 +13,9 @@ public class Chart
     public float YMin, YMax;
     public float XMin, XMax;
     public int BufferSize;
+
+    private string _yMinInput;
+    private string _yMaxInput;
 
     internal Rect Position;
 
@@ -37,6 +41,7 @@ public class Chart
     {
         var chartRect = GUILayoutUtility.GetRect(Width, Height);
         DrawLegend();
+        DrawLimits();
 
         if (Event.current.type == EventType.Repaint && streams.Count > 0 && GraphRegistry.LineMat != null)
         {
@@ -127,5 +132,22 @@ public class Chart
 
         GUILayout.FlexibleSpace();
         GUILayout.EndHorizontal();
+    }
+
+    private void DrawLimits()
+    {
+        if (_yMinInput == null) _yMinInput = YMin.ToString("0.###");
+        if (_yMaxInput == null) _yMaxInput = YMax.ToString("0.###");
+
+        GUILayout.BeginHorizontal();
+        GUILayout.Label("Y min", GUILayout.Width(44f));
+        _yMinInput = GUILayout.TextField(_yMinInput, GUILayout.Width(64f));
+        GUILayout.Label("max", GUILayout.Width(30f));
+        _yMaxInput = GUILayout.TextField(_yMaxInput, GUILayout.Width(64f));
+        GUILayout.FlexibleSpace();
+        GUILayout.EndHorizontal();
+
+        if (float.TryParse(_yMinInput, NumberStyles.Float, CultureInfo.InvariantCulture, out var mn)) YMin = mn;
+        if (float.TryParse(_yMaxInput, NumberStyles.Float, CultureInfo.InvariantCulture, out var mx)) YMax = mx;
     }
 }
