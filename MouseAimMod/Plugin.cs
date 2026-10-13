@@ -54,6 +54,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> AdaptiveTauMax;
     internal static ConfigEntry<float> AdaptiveThetaMin;
     internal static ConfigEntry<float> AdaptiveKdMax;
+    internal static ConfigEntry<float> GeomOaObSum;
     internal static ConfigEntry<float> TargetFilterTau;
     internal static ConfigEntry<int> LagIntervalFrames;
     internal static ConfigEntry<int> LagRingSize;
@@ -122,6 +123,9 @@ public class Plugin : BaseUnityPlugin
         AdaptiveKdMax = Config.Bind("Adaptive", "KdMax", 1f,
             new ConfigDescription("Hard cap on the per-axis rate-feedback gain Kd = Gain*Kp*tau (stops the limit cycle).",
                 new AcceptableValueRange<float>(0f, 10f)));
+        GeomOaObSum = Config.Bind("Geometry", "OaObSum", 1f,
+            new ConfigDescription("|OA| + |OB| total length (A sits Sum-|OB| below O). 1 = original geometry.",
+                new AcceptableValueRange<float>(1f, 2f)));
         TargetFilterTau = Config.Bind("Filter", "TargetTau", 0.05f,
             new ConfigDescription("Low-pass time constant on the input target direction (0 = off).",
                 new AcceptableValueRange<float>(0f, 1f)));
