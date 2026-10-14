@@ -54,8 +54,9 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> AdaptiveThetaMin;
     internal static ConfigEntry<float> AdaptiveKdMax;
     internal static ConfigEntry<float> GeomOaObSum;
+    internal static ConfigEntry<float> LevelDriveGain;
+    internal static ConfigEntry<float> LevelDriveThreshold;
     internal static ConfigEntry<float> HeliRpmGuardGain;
-    internal static ConfigEntry<float> TargetFilterTau;
     internal static ConfigEntry<int> LagIntervalFrames;
     internal static ConfigEntry<int> LagRingSize;
     internal static ConfigEntry<int> LagPredHorizon;
@@ -122,10 +123,12 @@ public class Plugin : BaseUnityPlugin
             D("Fixed proportional gain, roll.", new AcceptableValueRange<float>(0f, 20f), 40));
         FeedbackGain = Config.Bind("Tuning", "RateFeedback", 0.2f,
             D("Rate-damping master scale: u -= RateFeedback*Kp*tau*omega (capped by Adaptive/KdMax).", new AcceptableValueRange<float>(0f, 3f), 30));
-        TargetFilterTau = Config.Bind("Tuning", "TargetSmoothing", 0.05f,
-            D("Low-pass time constant (s) on the aim direction; 0 = off.", new AcceptableValueRange<float>(0f, 1f), 20));
         GeomOaObSum = Config.Bind("Tuning", "ApexSum", 1f,
             D("Jet only (body-frame law): |OA|+|OB| total length; 1 = original, higher shifts the roll flip later.", new AcceptableValueRange<float>(1f, 2f), 10));
+        LevelDriveGain = Config.Bind("Tuning", "LevelDriveGain", 0.1f,
+            D("Body-frame law: wings-level drive added to the roll err when aimed; weight of (bank/pi).", new AcceptableValueRange<float>(0f, 2f), 9));
+        LevelDriveThreshold = Config.Bind("Tuning", "LevelDriveThreshold", 0.05f,
+            D("Body-frame law: |pitchErr| and |yawErr| must both be below this (5% of full scale) to apply the wings-level drive.", new AcceptableValueRange<float>(0f, 0.5f), 8));
 
         Adaptive = Config.Bind("Adaptive", "Enabled", true,
             D("Derive Kp/Kd online from the identified plant (K,tau,theta) instead of the fixed gains.", 80));

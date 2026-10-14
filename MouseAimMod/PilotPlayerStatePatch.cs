@@ -8,8 +8,6 @@ public static class PilotPlayerStatePatch
 {
     private static bool _stabilityKilled;
     private static bool _stabilityOrig;
-    private static Vector3 _viewFilt;
-    private static bool _filtInit;
 
     [HarmonyPatch("PlayerControls")]
     [HarmonyPostfix]
@@ -58,17 +56,7 @@ public static class PilotPlayerStatePatch
         if (!aimActive) return;
         if (Camera.main == null) return;
 
-        // 目标输入：视线方向先低通滤波（世界系），再转机体坐标系
-        Vector3 viewRaw = Camera.main.transform.forward;
-        float fTau = Plugin.TargetFilterTau.Value;
-        if (fTau > 0.001f)
-        {
-            float fdt = Time.fixedDeltaTime > 1e-5f ? Time.fixedDeltaTime : 0.02f;
-            if (!_filtInit) { _viewFilt = viewRaw; _filtInit = true; }
-            _viewFilt += (fdt / (fTau + fdt)) * (viewRaw - _viewFilt);
-        }
-        else { _viewFilt = viewRaw; _filtInit = false; }
-        Vector3 viewDirection = _viewFilt.normalized;
+        Vector3 viewDirection = Camera.main.transform.forward.normalized;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
 
         float pitchErr, rollErr, yawErr;
@@ -98,6 +86,13 @@ public static class PilotPlayerStatePatch
             rollErr = rollAngle / Mathf.PI;
             yawErr = (oaSum - bLen) / oaSum * rollAngle * (2f / Mathf.PI);
             pitchErr = -dy;
+
+            // 水平驱动：瞄准到位时，按当前坡度角叠加一个改平项（每帧重算，非累加）
+            if (Mathf.Abs(pitchErr) < Plugin.LevelDriveThreshold.Value && Mathf.Abs(yawErr) < Plugin.LevelDriveThreshold.Value)
+            {
+                float phi = Mathf.Atan2(Vector3.Dot(aircraft.transform.right, Vector3.up), Vector3.Dot(aircraft.transform.up, Vector3.up));
+                rollErr += phi / Mathf.PI * Plugin.LevelDriveGain.Value;
+            }
         }
 
         float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
