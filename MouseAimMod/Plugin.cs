@@ -37,7 +37,6 @@ public class Plugin : BaseUnityPlugin
 
     internal static ConfigEntry<bool> MouseAimEnabled;
     internal static ConfigEntry<bool> InvertFreeLook;
-    internal static ConfigEntry<float> HoverExitAngle;
     internal static ConfigEntry<bool> StabilityKbEnabled;
 
     // 简易比例映射增益：u = Kp * e（e 为目标方位在机体坐标系下的分量）
@@ -55,6 +54,7 @@ public class Plugin : BaseUnityPlugin
     internal static ConfigEntry<float> AdaptiveThetaMin;
     internal static ConfigEntry<float> AdaptiveKdMax;
     internal static ConfigEntry<float> GeomOaObSum;
+    internal static ConfigEntry<float> HeliRpmGuardGain;
     internal static ConfigEntry<float> TargetFilterTau;
     internal static ConfigEntry<int> LagIntervalFrames;
     internal static ConfigEntry<int> LagRingSize;
@@ -80,79 +80,92 @@ public class Plugin : BaseUnityPlugin
 
     private Harmony _harmony;
 
+    // BepInEx ConfigurationManager 覆写：Order 越大越靠上；IsAdvanced 折叠到 "Advanced"。
+    private sealed class ConfigurationManagerAttributes
+    {
+        public int? Order;
+        public bool? IsAdvanced;
+    }
+
+    private static ConfigDescription D(string desc, int order, bool advanced = false)
+        => new ConfigDescription(desc, null,
+            new ConfigurationManagerAttributes { Order = order, IsAdvanced = advanced ? true : (bool?)null });
+
+    private static ConfigDescription D(string desc, AcceptableValueBase range, int order, bool advanced = false)
+        => new ConfigDescription(desc, range,
+            new ConfigurationManagerAttributes { Order = order, IsAdvanced = advanced ? true : (bool?)null });
+
     private void Awake()
     {
         Logger = base.Logger;
         Logger.LogInfo("Mouse Aim Mod is loaded!");
 
-        MouseAimEnabled = Config.Bind("General", "MouseAimEnabled", true, "Enable mouse aim");
-        InvertFreeLook = Config.Bind("General", "InvertFreeLook", false, "When true, mouse aim is active only while Free Look is held");
-        StabilityKbEnabled = Config.Bind("General", "StabilityKill", false, "Temporarily disable flight assist while keyboard pitch is active");
-        HoverExitAngle = Config.Bind("Hover", "ExitAngle", 20f,
-            new ConfigDescription("Pitch or roll angle exceeding this disables hover throttle",
-                new AcceptableValueRange<float>(5f, 60f)));
+        // ConfigManager 的段落显示顺序 = 下面首个 Bind 的顺序（不按字母序），调整位置会改变分组显示顺序，勿随意重排。
+        MouseAimEnabled = Config.Bind("General", "Enabled", true,
+            D("Master switch for the mouse-aim assist.", 60));
+        InvertFreeLook = Config.Bind("General", "FreeLookOnly", false,
+            D("When true the assist runs ONLY while Free Look is held (instead of the opposite).", 50));
+        StabilityKbEnabled = Config.Bind("General", "StabilityKill", false,
+            D("Temporarily disable flight assist while the keyboard pitch axis is active.", 40));
+        AimPitch = Config.Bind("General", "AimPitch", true,
+            D("Allow the assist to drive the pitch axis (off = leave pitch to the pilot).", 30));
+        AimRoll = Config.Bind("General", "AimRoll", true,
+            D("Allow the assist to drive the roll axis.", 20));
+        AimYaw = Config.Bind("General", "AimYaw", true,
+            D("Allow the assist to drive the yaw axis.", 10));
 
-        PropGainPitch = Config.Bind("Proportional", "GainPitch", 1f,
-            new ConfigDescription("Proportional gain for pitch: pitch = -Kp * sin(vertical deviation)",
-                new AcceptableValueRange<float>(0f, 20f)));
-        PropGainYaw = Config.Bind("Proportional", "GainYaw", 1f,
-            new ConfigDescription("Proportional gain for yaw: yaw = Kp * sin(horizontal deviation)",
-                new AcceptableValueRange<float>(0f, 20f)));
-        PropGainRoll = Config.Bind("Proportional", "GainRoll", 1f,
-            new ConfigDescription("Proportional gain for roll: roll = Kp * horizontal deviation",
-                new AcceptableValueRange<float>(0f, 20f)));
+        PropGainPitch = Config.Bind("Tuning", "PitchGain", 1f,
+            D("Fixed proportional gain, pitch. Used when Adaptive is off or has no valid estimate.", new AcceptableValueRange<float>(0f, 20f), 60));
+        PropGainYaw = Config.Bind("Tuning", "YawGain", 1f,
+            D("Fixed proportional gain, yaw.", new AcceptableValueRange<float>(0f, 20f), 50));
+        PropGainRoll = Config.Bind("Tuning", "RollGain", 1f,
+            D("Fixed proportional gain, roll.", new AcceptableValueRange<float>(0f, 20f), 40));
+        FeedbackGain = Config.Bind("Tuning", "RateFeedback", 0.2f,
+            D("Rate-damping master scale: u -= RateFeedback*Kp*tau*omega (capped by Adaptive/KdMax).", new AcceptableValueRange<float>(0f, 3f), 30));
+        TargetFilterTau = Config.Bind("Tuning", "TargetSmoothing", 0.05f,
+            D("Low-pass time constant (s) on the aim direction; 0 = off.", new AcceptableValueRange<float>(0f, 1f), 20));
+        GeomOaObSum = Config.Bind("Tuning", "ApexSum", 1f,
+            D("Jet only (body-frame law): |OA|+|OB| total length; 1 = original, higher shifts the roll flip later.", new AcceptableValueRange<float>(1f, 2f), 10));
 
-        FeedbackGain = Config.Bind("Feedback", "Gain", 0.2f,
-            new ConfigDescription("Master scale on the rate feedback: u -= Gain*Kp*tau*omega (capped by Adaptive KdMax).",
-                new AcceptableValueRange<float>(0f, 3f)));
         Adaptive = Config.Bind("Adaptive", "Enabled", true,
-            "Derive Kp/Kd online from the identified (K,tau,theta) instead of the fixed Proportional gains.");
-        AdaptiveWc = Config.Bind("Adaptive", "Wc", 0.4f,
-            new ConfigDescription("Kp = Wc / (K * max(theta, ThetaMin)).",
-                new AcceptableValueRange<float>(0.05f, 2f)));
+            D("Derive Kp/Kd online from the identified plant (K,tau,theta) instead of the fixed gains.", 80));
+        AdaptiveWc = Config.Bind("Adaptive", "Bandwidth", 0.4f,
+            D("Target bandwidth: Kp = Bandwidth / (|K| * max(theta, ThetaMin)).", new AcceptableValueRange<float>(0.05f, 2f), 70));
         AdaptiveKpMin = Config.Bind("Adaptive", "KpMin", 0.2f,
-            new ConfigDescription("Kp clamp min.", new AcceptableValueRange<float>(0.01f, 20f)));
+            D("Adaptive Kp lower clamp.", new AcceptableValueRange<float>(0.01f, 5f), 60));
         AdaptiveKpMax = Config.Bind("Adaptive", "KpMax", 4f,
-            new ConfigDescription("Kp clamp max.", new AcceptableValueRange<float>(0.01f, 100f)));
-        AdaptiveTauMin = Config.Bind("Adaptive", "TauMin", 0.05f,
-            new ConfigDescription("tau clamp min for Kd = Kp*tau.", new AcceptableValueRange<float>(0.01f, 1f)));
-        AdaptiveTauMax = Config.Bind("Adaptive", "TauMax", 1f,
-            new ConfigDescription("tau clamp max.", new AcceptableValueRange<float>(0.01f, 3f)));
-        AdaptiveThetaMin = Config.Bind("Adaptive", "ThetaMin", 0.02f,
-            new ConfigDescription("theta floor (stops Kp blow-up as theta -> 0).", new AcceptableValueRange<float>(0.005f, 0.5f)));
+            D("Adaptive Kp upper clamp.", new AcceptableValueRange<float>(0.01f, 20f), 50));
         AdaptiveKdMax = Config.Bind("Adaptive", "KdMax", 1f,
-            new ConfigDescription("Hard cap on the per-axis rate-feedback gain Kd = Gain*Kp*tau (stops the limit cycle).",
-                new AcceptableValueRange<float>(0f, 10f)));
-        GeomOaObSum = Config.Bind("Geometry", "OaObSum", 1f,
-            new ConfigDescription("|OA| + |OB| total length (A sits Sum-|OB| below O). 1 = original geometry.",
-                new AcceptableValueRange<float>(1f, 2f)));
-        TargetFilterTau = Config.Bind("Filter", "TargetTau", 0.05f,
-            new ConfigDescription("Low-pass time constant on the input target direction (0 = off).",
-                new AcceptableValueRange<float>(0f, 1f)));
-        LagIntervalFrames = Config.Bind("Lag", "IntervalFrames", 30,
-            new ConfigDescription("Re-estimate the lag every N physics frames.",
-                new AcceptableValueRange<int>(1, 300)));
-        LagRingSize = Config.Bind("Lag", "RingSize", 256,
-            new ConfigDescription("Identification window length, samples per axis (takes effect on reload).",
-                new AcceptableValueRange<int>(32, 4096)));
-        LagPredHorizon = Config.Bind("Lag", "PredHorizon", 20,
-            new ConfigDescription("H-step simulation horizon (frames) for the quality gate.",
-                new AcceptableValueRange<int>(2, 200)));
-        LagSmoothWindow = Config.Bind("Lag", "SmoothWindow", 5,
-            new ConfigDescription("Moving-average window on u,y before identification (odd; removes noise bias).",
-                new AcceptableValueRange<int>(1, 15)));
-        LagAdaptiveSmooth = Config.Bind("Lag", "AdaptiveSmooth", true,
-            "Pick the smoothing window per axis from the last tau (fast axes -> smaller window).");
-        LagAdaptiveK = Config.Bind("Lag", "AdaptiveK", 0.3f,
-            new ConfigDescription("Adaptive smoothing: window ~= AdaptiveK * tau / dt (clamped 3..13).",
-                new AcceptableValueRange<float>(0.05f, 1f)));
-        AimPitch = Config.Bind("Control", "AimPitch", true, "Enable the mouse-aim output on the pitch axis (off = suppress assist pitch).");
-        AimRoll = Config.Bind("Control", "AimRoll", true, "Enable the mouse-aim output on the roll axis (off = suppress assist roll).");
-        AimYaw = Config.Bind("Control", "AimYaw", true, "Enable the mouse-aim output on the yaw axis (off = suppress assist yaw).");
+            D("Hard cap on the per-axis rate-feedback gain Kd = RateFeedback*Kp*tau (prevents roll/yaw limit cycles).", new AcceptableValueRange<float>(0f, 10f), 40));
+        AdaptiveThetaMin = Config.Bind("Adaptive", "ThetaMin", 0.02f,
+            D("Identified dead-time floor (stops Kp blowing up as theta -> 0).", new AcceptableValueRange<float>(0.005f, 0.5f), 30, true));
+        AdaptiveTauMin = Config.Bind("Adaptive", "TauMin", 0.05f,
+            D("Identified tau lower clamp (used for Kd).", new AcceptableValueRange<float>(0.01f, 1f), 20, true));
+        AdaptiveTauMax = Config.Bind("Adaptive", "TauMax", 1f,
+            D("Identified tau upper clamp.", new AcceptableValueRange<float>(0.01f, 3f), 10, true));
 
-        ActivePreset = Config.Bind("Presets", "ActivePreset", PresetSlot.Slot1, "Select preset slot for save/load.");
-        SavePreset = Config.Bind("Presets", "SavePreset", false, "Toggle ON to save current config to active preset.");
-        LoadPreset = Config.Bind("Presets", "LoadPreset", false, "Toggle ON to load config from active preset.");
+        HeliRpmGuardGain = Config.Bind("Heli", "RpmGuardGain", 1.5f,
+            D("Rotor aircraft only. Hover auto-throttle guard: throttle -= (nominalRPM - avgRotorRPM)*gain while drooping.", new AcceptableValueRange<float>(0f, 6f), 10));
+
+        LagIntervalFrames = Config.Bind("Lag", "IntervalFrames", 30,
+            D("Re-identify every N physics frames.", new AcceptableValueRange<int>(1, 300), 60, true));
+        LagRingSize = Config.Bind("Lag", "RingSize", 256,
+            D("Identification window, samples per axis (applies after reload).", new AcceptableValueRange<int>(32, 4096), 50, true));
+        LagPredHorizon = Config.Bind("Lag", "PredHorizon", 20,
+            D("H-step simulation horizon (frames) for the identification quality gate.", new AcceptableValueRange<int>(2, 200), 40, true));
+        LagSmoothWindow = Config.Bind("Lag", "SmoothWindow", 5,
+            D("Fixed moving-average window on u,y before identification.", new AcceptableValueRange<int>(1, 15), 30, true));
+        LagAdaptiveSmooth = Config.Bind("Lag", "AdaptiveSmooth", true,
+            D("Pick the smoothing window per axis from the last tau (fast axes -> smaller window).", 20, true));
+        LagAdaptiveK = Config.Bind("Lag", "AdaptiveK", 0.3f,
+            D("Adaptive smoothing: window ~= AdaptiveK * tau / dt (clamped 3..13).", new AcceptableValueRange<float>(0.05f, 1f), 10, true));
+
+        ActivePreset = Config.Bind("Presets", "ActivePreset", PresetSlot.Slot1,
+            D("Slot used by SavePreset / LoadPreset.", 30));
+        SavePreset = Config.Bind("Presets", "SavePreset", false,
+            D("Toggle ON to save the current settings into the active slot.", 20));
+        LoadPreset = Config.Bind("Presets", "LoadPreset", false,
+            D("Toggle ON to load the active slot into the current settings.", 10));
 
         SavePreset.SettingChanged += (_, _) => { if (SavePreset.Value) { SaveToPreset(ActivePreset.Value); SavePreset.Value = false; } };
         LoadPreset.SettingChanged += (_, _) => { if (LoadPreset.Value) { LoadFromPreset(ActivePreset.Value); LoadPreset.Value = false; } };

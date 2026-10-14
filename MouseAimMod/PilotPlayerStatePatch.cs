@@ -20,15 +20,13 @@ public static class PilotPlayerStatePatch
         if (!FlightHudStatePatch.CanvasEnabled) return;
         var pilot = ___pilot;
         if (pilot == null || pilot.aircraft == null) return;
-        if (!pilot.aircraft.GetAircraftParameters().verticalLanding) return;
-        var aircraft = pilot.aircraft;
-        float pitch = Mathf.Asin(-aircraft.transform.forward.y) * Mathf.Rad2Deg;
-        float roll  = Mathf.Asin( aircraft.transform.right.y)  * Mathf.Rad2Deg;
-        if (Mathf.Abs(pitch) > Plugin.HoverExitAngle.Value || Mathf.Abs(roll) > Plugin.HoverExitAngle.Value)
+        if (!HeliGeometry.AircraftHasRotor(pilot.aircraft))
         {
             if (HoverThrottleController.HoverActive) HoverThrottleController.Disable(__instance);
+            return;
         }
-        else if (GameManager.playerInput.GetButtonTimedPressUp("Brake", 0f, PlayerSettings.clickDelay))
+        if (!pilot.aircraft.GetAircraftParameters().verticalLanding) return;
+        if (GameManager.playerInput.GetButtonTimedPressUp("Brake", 0f, PlayerSettings.clickDelay))
         {
             if (!HoverThrottleController.HoverActive) HoverThrottleController.Enable(__instance);
             else HoverThrottleController.Disable(__instance);
@@ -53,7 +51,7 @@ public static class PilotPlayerStatePatch
         if (controlInputs == null) return;
 
         bool canHover = aircraft.GetAircraftParameters().verticalLanding;
-        if (HoverThrottleController.HoverActive && canHover)
+        if (HeliGeometry.AircraftHasRotor(aircraft) && HoverThrottleController.HoverActive && canHover)
             HoverThrottleController.ApplyHoverThrottle(controlInputs, aircraft);
 
         bool aimActive = Plugin.InvertFreeLook.Value ? freeLook : !freeLook;
@@ -73,25 +71,34 @@ public static class PilotPlayerStatePatch
         Vector3 viewDirection = _viewFilt.normalized;
         Vector3 localTarget = Quaternion.Inverse(aircraft.transform.rotation) * viewDirection;
 
-        // 视线在右-上平面的投影 B=(x,y,0)。后半球(z<0)时沿 O->B 方向把 B 移到单位圆上得 B'(|OB'|=1,方向不变)，
-        // 再代入同一套几何（|OA|+|OB| = L，L 由 [Geometry] OaObSum 配置，默认 1）：
-        //   rollErr = ∠OAB/π = atan2(B'.x, B'.y+L-|OB'|)/π   (AB 与垂直轴夹角；正下方 180° → ±1 满舵)
-        //   yawErr  = (L-|OB'|)/L·∠OAB·(2/π)                 (以 A 为心、AO 为半径的弧长；除以 L 使最大值≈±1)
-        //   pitchErr = -B'.y
-        float oaSum = Mathf.Clamp(Plugin.GeomOaObSum.Value, 1f, 2f);
-        float dx = localTarget.x;
-        float dy = localTarget.y;
-        float bLen = Mathf.Sqrt(dx * dx + dy * dy);
-        if (localTarget.z < 0f && bLen > 0f)
+        float pitchErr, rollErr, yawErr;
+        if (HeliGeometry.AircraftHasRotor(aircraft))
         {
-            dx /= bLen;
-            dy /= bLen;
-            bLen = 1f;
+            Vector3 gDown = aircraft.transform.InverseTransformDirection(Vector3.down);
+            HeliGeometry.Compute(localTarget, gDown, out rollErr, out pitchErr, out yawErr);
         }
-        float rollAngle = Mathf.Atan2(dx, dy + oaSum - bLen);
-        float rollErr = rollAngle / Mathf.PI;
-        float yawErr = (oaSum - bLen) / oaSum * rollAngle * (2f / Mathf.PI);
-        float pitchErr = -dy;
+        else
+        {
+            // 视线在右-上平面的投影 B=(x,y,0)。后半球(z<0)时沿 O->B 方向把 B 移到单位圆上得 B'(|OB'|=1,方向不变)，
+            // 再代入同一套几何（|OA|+|OB| = L，L 由 [Geometry] OaObSum 配置，默认 1）：
+            //   rollErr = ∠OAB/π = atan2(B'.x, B'.y+L-|OB'|)/π   (AB 与垂直轴夹角；正下方 180° → ±1 满舵)
+            //   yawErr  = (L-|OB'|)/L·∠OAB·(2/π)                 (以 A 为心、AO 为半径的弧长；除以 L 使最大值≈±1)
+            //   pitchErr = -B'.y
+            float oaSum = Mathf.Clamp(Plugin.GeomOaObSum.Value, 1f, 2f);
+            float dx = localTarget.x;
+            float dy = localTarget.y;
+            float bLen = Mathf.Sqrt(dx * dx + dy * dy);
+            if (localTarget.z < 0f && bLen > 0f)
+            {
+                dx /= bLen;
+                dy /= bLen;
+                bLen = 1f;
+            }
+            float rollAngle = Mathf.Atan2(dx, dy + oaSum - bLen);
+            rollErr = rollAngle / Mathf.PI;
+            yawErr = (oaSum - bLen) / oaSum * rollAngle * (2f / Mathf.PI);
+            pitchErr = -dy;
+        }
 
         float gp = Plugin.PropGainPitch.Value, gy = Plugin.PropGainYaw.Value, gr = Plugin.PropGainRoll.Value;
         if (Plugin.Adaptive.Value)
@@ -121,13 +128,9 @@ public static class PilotPlayerStatePatch
         float rollOut  = Mathf.Clamp(u.y - kdR * (-omega.z), -1f, 1f);
         float yawOut   = Mathf.Clamp(u.z - kdY * omega.y,    -1f, 1f);
 
-        bool anyManualInput = controlInputs.pitch != 0f || controlInputs.roll != 0f || controlInputs.yaw != 0f;
-        if (!anyManualInput)
-        {
-            if (Plugin.AimPitch.Value) controlInputs.pitch = pitchOut;
-            if (Plugin.AimRoll.Value)  controlInputs.roll  = rollOut;
-            if (Plugin.AimYaw.Value)   controlInputs.yaw   = yawOut;
-        }
+        if (Plugin.AimPitch.Value && controlInputs.pitch == 0f) controlInputs.pitch = pitchOut;
+        if (Plugin.AimRoll.Value && controlInputs.roll == 0f) controlInputs.roll = rollOut;
+        if (Plugin.AimYaw.Value && controlInputs.yaw == 0f) controlInputs.yaw = yawOut;
 
         LagEstimator.NoteAircraft(aircraft.GetInstanceID());
         LagEstimator.Sample(0, controlInputs.pitch, omega.x);
